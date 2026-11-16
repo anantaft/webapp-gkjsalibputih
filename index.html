@@ -283,7 +283,7 @@
     </footer>
   </div>
 
-  <!-- ================= HALAMAN LOGIN ================= -->
+<!-- ================= HALAMAN LOGIN & REGISTRASI ================= -->
   <div id="loginView" class="login-wrapper hidden">
     <div class="login-card">
       <div style="text-align:left;margin-bottom:14px;">
@@ -293,32 +293,78 @@
         <i data-lucide="church" class="icon-sm"></i>
         <span>GKJ SALIB PUTIH</span>
       </div>
-      <h1>Sistem Administrasi Warga</h1>
-      <p class="subtitle">Portal Pelayanan Jemaat, Warta, Keuangan & Administrasi Gerejawi</p>
+      <h1 id="authHeading">Sistem Administrasi Warga</h1>
+      <p id="authSubheading" class="subtitle">Portal Pelayanan Jemaat, Warta, Keuangan & Administrasi Gerejawi</p>
 
       <div id="connectionStatus" class="status-pill status-checking">
         <span class="status-dot"></span>
         <span>Memeriksa koneksi Google Sheets...</span>
       </div>
 
-      <form id="loginForm" class="form-stack" onsubmit="handleLogin(event)">
-        <div class="input-group">
-          <label for="loginUsername">Username</label>
-          <input type="text" id="loginUsername" placeholder="Contoh: admin atau jemaat" required />
-        </div>
-        <div class="input-group">
-          <label for="loginPassword">Kata Sandi</label>
-          <input type="password" id="loginPassword" placeholder="Masukkan kata sandi" required />
-        </div>
-        <button type="submit" id="btnLogin" class="btn-primary btn-full">
-          <i data-lucide="log-in" class="icon-sm"></i>
-          <span>Masuk ke Sistem</span>
-        </button>
-      </form>
+      <!-- TOMBOL TAB SWITCH LOGIN / DAFTAR WARGA -->
+      <div class="auth-tabs" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#f1f5f9;padding:4px;border-radius:11px;margin:14px 0;">
+        <button type="button" id="tabBtnLogin" class="auth-tab active" onclick="switchAuthMode('login')">Masuk Akun</button>
+        <button type="button" id="tabBtnRegister" class="auth-tab" onclick="switchAuthMode('register')">Daftar Warga</button>
+      </div>
 
-      <div class="demo-box">
-        <strong>Akun Demo:</strong><br>
-        Admin: <code>admin</code> / <code>123</code> &nbsp;|&nbsp; Jemaat: <code>jemaat</code> / <code>123</code>
+      <!-- PANEL 1: LOGIN -->
+      <div id="loginPanel">
+        <form id="loginForm" class="form-stack" onsubmit="handleLogin(event)">
+          <div class="input-group">
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" placeholder="Contoh: admin atau jemaat" required />
+          </div>
+          <div class="input-group">
+            <label for="loginPassword">Kata Sandi</label>
+            <input type="password" id="loginPassword" placeholder="Masukkan kata sandi" required />
+          </div>
+          <button type="submit" id="btnLogin" class="btn-primary btn-full">
+            <i data-lucide="log-in" class="icon-sm"></i>
+            <span>Masuk ke Sistem</span>
+          </button>
+        </form>
+
+        <div class="demo-box">
+          <strong>Akun Demo:</strong><br>
+          Admin: <code>admin</code> / <code>123</code> &nbsp;|&nbsp; Jemaat: <code>jemaat</code> / <code>123</code>
+        </div>
+      </div>
+
+      <!-- PANEL 2: REGISTRASI WARGA BARU -->
+      <div id="registerPanel" class="hidden">
+        <form id="registerForm" class="form-stack" onsubmit="handleRegister(event)">
+          <div class="input-group">
+            <label for="regNama">Nama Lengkap (Sesuai Buku Induk)</label>
+            <input type="text" id="regNama" placeholder="Contoh: Yohanes Prakoso" required />
+          </div>
+          <div class="input-group">
+            <label for="regWilayah">Wilayah / Pepanthan</label>
+            <select id="regWilayah" required>
+              <option value="Gereja Induk Salib Putih">Gereja Induk Salib Putih</option>
+              <option value="Pepanthan Pandanan">Pepanthan Pandanan</option>
+              <option value="Pepanthan Warak">Pepanthan Warak</option>
+              <option value="Pepanthan Tetep">Pepanthan Tetep</option>
+              <option value="Wilayah Kalibeji">Wilayah Kalibeji</option>
+              <option value="Unit Panti Wredha">Unit Panti Wredha</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="regNoInduk">Nomor Induk Jemaat (Opsional)</label>
+            <input type="text" id="regNoInduk" placeholder="Kosongkan jika belum tahu" />
+          </div>
+          <div class="input-group">
+            <label for="regUsername">Buat Username Login</label>
+            <input type="text" id="regUsername" placeholder="Tanpa spasi, misal: yohanes" required />
+          </div>
+          <div class="input-group">
+            <label for="regPassword">Buat Kata Sandi</label>
+            <input type="password" id="regPassword" placeholder="Minimal 4 karakter" required />
+          </div>
+          <button type="submit" id="btnRegister" class="btn-primary btn-full">
+            <i data-lucide="user-plus" class="icon-sm"></i>
+            <span>Daftarkan Akun & Masuk</span>
+          </button>
+        </form>
       </div>
     </div>
   </div>
@@ -352,10 +398,10 @@
           <h2 id="pageTitle">Dashboard</h2>
           <p id="pageDesc">Sistem Informasi Manajemen Jemaat GKJ Salib Putih</p>
         </div>
-        <button type="button" onclick="refreshCurrentTab()" class="btn-outline" title="Segarkan Data">
-          <i data-lucide="refresh-cw" class="icon-sm"></i>
-          <span>Segarkan</span>
-        </button>
+        <button type="button" onclick="logout()" class="btn-logout-mobile" title="Keluar Akun">
+  <i data-lucide="log-out" class="icon-sm"></i>
+  <span>Keluar</span>
+</button>
       </header>
       <div id="contentContainer" class="content-body"></div>
     </main>

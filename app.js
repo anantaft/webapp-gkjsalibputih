@@ -1,5 +1,6 @@
-// ================= KONFIGURASI URL APPS SCRIPT =================
+// ================= KONFIGURASI URL APPS SCRIPT & GOOGLE CLIENT ID =================
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxWEJ8rfi_18QdKJ8RWzjftTLsLEsW8ce4gN5o7B5E0nwpYYjOxj-M7tqNb-0aRzY37iQ/exec';
+const GOOGLE_CLIENT_ID = ''; // Kosongkan selama tahap prototype
 
 const WILAYAH_LIST = [
   'Gereja Induk Salib Putih',
@@ -32,7 +33,7 @@ function showToast(msg, isError = false) {
   el.textContent = msg;
   el.style.background = isError ? '#dc2626' : '#0f172a';
   el.classList.remove('hidden');
-  setTimeout(() => el.classList.add('hidden'), 3200);
+  setTimeout(() => el.classList.add('hidden'), 3400);
 }
 
 function formatRupiah(num) {
@@ -48,7 +49,7 @@ function fileToBase64(file) {
   });
 }
 
-// ================= NAVIGASI LANDING, LOGIN & SHELL =================
+// ================= NAVIGASI LANDING, LOGIN & REGISTRASI =================
 function toggleMobileNav() {
   const nav = document.getElementById('lpNavMenu');
   if (nav) nav.classList.toggle('open');
@@ -70,7 +71,39 @@ function showLoginView() {
   document.getElementById('landingView').classList.add('hidden');
   document.getElementById('loginView').classList.remove('hidden');
   document.getElementById('appShell').classList.add('hidden');
+  switchAuthMode('login');
+  initGoogleSignIn();
   renderIcons();
+}
+
+function showRegisterView() {
+  document.getElementById('landingView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('appShell').classList.add('hidden');
+  switchAuthMode('register');
+  renderIcons();
+}
+
+function switchAuthMode(mode) {
+  const isLogin = mode === 'login';
+  document.getElementById('tabBtnLogin').classList.toggle('active', isLogin);
+  document.getElementById('tabBtnRegister').classList.toggle('active', !isLogin);
+  document.getElementById('loginPanel').classList.toggle('hidden', !isLogin);
+  document.getElementById('registerPanel').classList.toggle('hidden', isLogin);
+  document.getElementById('authHeading').textContent = isLogin ? 'Portal Pelayanan Warga' : 'Registrasi Akun Warga';
+  document.getElementById('authSubheading').textContent = isLogin
+    ? 'Masuk menggunakan akun warga atau majelis GKJ Salib Putih'
+    : 'Buat akun untuk mengajukan surat gerejawi & membaca arsip warta';
+  renderIcons();
+}
+
+// ================= GOOGLE SIGN-IN (DITUNDA UNTUK PROTOTYPE) =================
+function initGoogleSignIn() {
+  const wrapper = document.getElementById('googleBtnWrapper');
+  if (!wrapper) return;
+  if (!GOOGLE_CLIENT_ID) {
+    wrapper.innerHTML = `<span style="font-size:11.5px;color:var(--muted);">Gunakan akun demo atau daftar akun warga baru di tab sebelah</span>`;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -144,7 +177,7 @@ async function loadLandingData() {
   }
 }
 
-// ================= PROSES LOGIN =================
+// ================= PROSES LOGIN & REGISTRASI MANDIRI =================
 async function handleLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
 
@@ -183,6 +216,83 @@ async function handleLogin(e) {
   }
 }
 
+async function handleRegister(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const btn = document.getElementById('btnRegister');
+  const nama = document.getElementById('regNama')?.value.trim() || '';
+  const wilayah = document.getElementById('regWilayah')?.value || 'Gereja Induk Salib Putih';
+  const noInduk = document.getElementById('regNoInduk')?.value.trim() || '';
+  const username = document.getElementById('regUsername')?.value.trim() || '';
+  const password = document.getElementById('regPassword')?.value.trim() || '';
+
+  if (!nama || !username || password.length < 3) {
+    alert('Nama, username, dan kata sandi (minimal 3 karakter) wajib diisi.');
+    return;
+  }
+
+  // Otomatis deteksi variabel URL Apps Script yang dipakai di app.js
+  const endpointUrl =
+    (typeof GAS_WEB_APP_URL !== 'undefined' && GAS_WEB_APP_URL) ||
+    (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL) ||
+    (typeof API_URL !== 'undefined' && API_URL) ||
+    (typeof WEB_APP_URL !== 'undefined' && WEB_APP_URL);
+
+  if (!endpointUrl) {
+    alert('URL Google Apps Script tidak ditemukan di app.js. Cek nama variabel URL di baris paling atas app.js.');
+    return;
+  }
+
+  const payload = {
+    action: 'registerJemaat',
+    nama: nama,
+    wilayah: wilayah,
+    noInduk: noInduk,
+    username: username,
+    password: password
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span>Mendaftarkan akun...</span>';
+
+  try {
+    const res = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (parseErr) {
+      console.error('Respon mentah dari server:', text);
+      throw new Error('Server mengembalikan respon bukan JSON (cek izin akses Web App: Anyone).');
+    }
+
+    if (json.success && json.user) {
+      currentUser = json.user;
+      localStorage.setItem('gkjsp_user', JSON.stringify(currentUser));
+      if (typeof showToast === 'function') {
+        showToast('Pendaftaran berhasil! Selamat datang, ' + currentUser.nama);
+      } else {
+        alert('Pendaftaran berhasil! Selamat datang, ' + currentUser.nama);
+      }
+      if (typeof initApp === 'function') initApp();
+    } else {
+      alert('Gagal mendaftar: ' + (json.message || 'Username sudah terdaftar.'));
+    }
+  } catch (err) {
+    console.error('Error registrasi:', err);
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="user-plus" class="icon-sm"></i><span>Daftarkan Akun & Masuk</span>';
+    if (typeof renderIcons === 'function') renderIcons();
+  }
+}
+
 function logout() {
   localStorage.removeItem('gkjsp_user');
   currentUser = null;
@@ -210,6 +320,7 @@ function initApp() {
     { id: 'users', label: 'Manajemen Akun', icon: 'shield-check' }
   ] : [
     { id: 'dashboard', label: 'Beranda Warga', icon: 'layout-dashboard' },
+    { id: 'jemaat', label: 'Data Jemaat', icon: 'users' },
     { id: 'surat', label: 'Pengajuan Surat', icon: 'file-plus' },
     { id: 'warta', label: 'Warta Jemaat', icon: 'book-open' },
     { id: 'keuangan', label: 'Laporan Keuangan', icon: 'wallet' }
@@ -240,7 +351,7 @@ function switchTab(tabId) {
 
   const titles = {
     dashboard: ['Dashboard Utama', 'Ringkasan Pelayanan & Administrasi GKJ Salib Putih'],
-    jemaat: ['Buku Induk & Data Jemaat', 'Kelola data warga jemaat seluruh wilayah & pepanthan'],
+    jemaat: ['Buku Induk & Data Jemaat', 'Direktori warga jemaat seluruh wilayah & pepanthan'],
     surat: ['Layanan Administrasi Surat', 'Pengajuan, verifikasi, dan arsip surat keterangan gerejawi'],
     keuangan: ['Laporan Keuangan Gereja', 'Transparansi pemasukan persembahan & pengeluaran bidang'],
     warta: ['Warta Jemaat & Tata Ibadah', 'Arsip digital Warta Jemaat GKJ Salib Putih'],
@@ -361,7 +472,7 @@ async function renderDashboard(container) {
       <div class="card">
         <div class="card-header">
           <h3>Sebaran Jemaat per Wilayah & Pepanthan</h3>
-          ${isAdmin ? `<button type="button" class="link-more" onclick="switchTab('jemaat')">Lihat Buku Induk →</button>` : ''}
+          <button type="button" class="link-more" onclick="switchTab('jemaat')">Lihat Data Jemaat →</button>
         </div>
         ${wilayahCounts.map(w => `
           <div class="wilayah-row">
@@ -392,10 +503,65 @@ async function renderDashboard(container) {
   `;
 }
 
+// ================= HELPER KOMPONEN SEARCH BAR =================
+function renderSearchBar(inputId, placeholder, handlerName) {
+  return `
+    <div class="search-toolbar">
+      <div class="search-input-wrap">
+        <i data-lucide="search" class="icon-sm"></i>
+        <input type="text" id="${inputId}" class="search-input" placeholder="${placeholder}"
+          oninput="${handlerName}()" onkeyup="if(event.key==='Enter') ${handlerName}()" />
+      </div>
+      <button type="button" class="btn-search" onclick="${handlerName}()">
+        <i data-lucide="search" class="icon-sm"></i>
+        <span>Cari</span>
+      </button>
+      <button type="button" class="btn-reset-search" onclick="resetSearch('${inputId}', ${handlerName})">Reset</button>
+    </div>
+  `;
+}
+
+function resetSearch(inputId, handlerFn) {
+  const el = document.getElementById(inputId);
+  if (el) {
+    el.value = '';
+    handlerFn();
+  }
+}
+
 // ================= 2. DATA JEMAAT =================
 async function renderJemaat(container) {
   const res = await apiGet('getJemaat');
   cache.jemaat = res.data || [];
+  const isAdmin = currentUser.role === 'admin';
+
+  if (!isAdmin) {
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3>Direktori Warga Jemaat (${cache.jemaat.length} Jiwa)</h3>
+            <p style="font-size:12.5px;color:var(--muted);margin-top:2px;">Menampilkan nama dan wilayah pelayanan warga GKJ Salib Putih</p>
+          </div>
+        </div>
+        ${renderSearchBar('searchJemaatInput', 'Cari nama warga atau wilayah / pepanthan...', 'filterJemaat')}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:60px;">No.</th>
+                <th>Nama Warga Jemaat</th>
+                <th>Wilayah / Pepanthan</th>
+              </tr>
+            </thead>
+            <tbody id="jemaatTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    filterJemaat();
+    return;
+  }
 
   container.innerHTML = `
     <div class="card">
@@ -405,6 +571,7 @@ async function renderJemaat(container) {
           <i data-lucide="user-plus" class="icon-sm"></i><span>Tambah Jemaat</span>
         </button>
       </div>
+      ${renderSearchBar('searchJemaatInput', 'Cari nama, no. induk, no. KK, wilayah, atau alamat...', 'filterJemaat')}
       <div class="table-wrap">
         <table>
           <thead>
@@ -412,26 +579,53 @@ async function renderJemaat(container) {
               <th>No. Induk</th><th>Nama Lengkap</th><th>L/P</th><th>Wilayah</th><th>Baptis / Sidi</th><th>No. HP</th><th>Aksi</th>
             </tr>
           </thead>
-          <tbody>
-            ${cache.jemaat.map(j => `
-              <tr>
-                <td><strong>${j.noInduk}</strong><br><small style="color:var(--muted)">${j.noKK || ''}</small></td>
-                <td><strong>${j.nama}</strong><br><small style="color:var(--muted)">${j.alamat || ''}</small></td>
-                <td>${j.jenisKelamin}</td>
-                <td>${j.wilayah}</td>
-                <td>${j.statusBaptisSidi}</td>
-                <td>${j.noHP || '-'}</td>
-                <td style="white-space:nowrap;">
-                  <button type="button" class="btn-outline btn-sm" onclick="openJemaatModal('${j.noInduk}')">Edit</button>
-                  <button type="button" class="btn-danger" onclick="hapusJemaat('${j.noInduk}')">Hapus</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
+          <tbody id="jemaatTableBody"></tbody>
         </table>
       </div>
     </div>
   `;
+  filterJemaat();
+}
+
+function filterJemaat() {
+  const tbody = document.getElementById('jemaatTableBody');
+  if (!tbody) return;
+  const q = (document.getElementById('searchJemaatInput')?.value || '').trim().toLowerCase();
+  const isAdmin = currentUser.role === 'admin';
+
+  const filtered = cache.jemaat.filter(j => {
+    if (!q) return true;
+    if (!isAdmin) {
+      return `${j.nama} ${j.wilayah}`.toLowerCase().includes(q);
+    }
+    return `${j.noInduk} ${j.noKK} ${j.nama} ${j.wilayah} ${j.statusBaptisSidi} ${j.noHP} ${j.alamat}`.toLowerCase().includes(q);
+  });
+
+  if (!isAdmin) {
+    tbody.innerHTML = filtered.map((j, index) => `
+      <tr>
+        <td><strong>#${index + 1}</strong></td>
+        <td><strong>${j.nama}</strong></td>
+        <td>${j.wilayah}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="3">Data warga jemaat tidak ditemukan.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(j => `
+    <tr>
+      <td><strong>${j.noInduk}</strong><br><small style="color:var(--muted)">${j.noKK || ''}</small></td>
+      <td><strong>${j.nama}</strong><br><small style="color:var(--muted)">${j.alamat || ''}</small></td>
+      <td>${j.jenisKelamin}</td>
+      <td>${j.wilayah}</td>
+      <td>${j.statusBaptisSidi}</td>
+      <td>${j.noHP || '-'}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="btn-outline btn-sm" onclick="openJemaatModal('${j.noInduk}')">Edit</button>
+        <button type="button" class="btn-danger" onclick="hapusJemaat('${j.noInduk}')">Hapus</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7">Data jemaat tidak ditemukan.</td></tr>';
 }
 
 function openJemaatModal(noInduk = null) {
@@ -498,7 +692,7 @@ async function renderSurat(container) {
   const res = await apiGet('getSurat');
   const all = res.data || [];
   const isAdmin = currentUser.role === 'admin';
-  cache.surat = isAdmin ? all : all.filter(s => s.pemohon === currentUser.nama || s.noInduk === currentUser.noInduk);
+  cache.surat = isAdmin ? all : all.filter(s => s.pemohon === currentUser.nama || (currentUser.noInduk !== '-' && s.noInduk === currentUser.noInduk));
 
   container.innerHTML = `
     <div class="card">
@@ -508,6 +702,7 @@ async function renderSurat(container) {
           <i data-lucide="file-plus" class="icon-sm"></i><span>Ajukan Surat Baru</span>
         </button>
       </div>
+      ${renderSearchBar('searchSuratInput', 'Cari ID surat, pemohon, jenis surat, tujuan, atau status...', 'filterSurat')}
       <div class="table-wrap">
         <table>
           <thead>
@@ -515,29 +710,41 @@ async function renderSurat(container) {
               <th>ID & Tgl</th><th>Pemohon</th><th>Jenis Surat</th><th>Tujuan</th><th>Berkas</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
-          <tbody>
-            ${cache.surat.map(s => `
-              <tr>
-                <td><strong>${s.idSurat}</strong><br><small style="color:var(--muted)">${s.tanggal}</small></td>
-                <td><strong>${s.pemohon}</strong><br><small style="color:var(--muted)">${s.wilayah}</small></td>
-                <td>${s.jenisSurat}</td>
-                <td>${s.tujuanSurat}</td>
-                <td>
-                  ${s.berkasPendukungUrl ? `<a href="${s.berkasPendukungUrl}" target="_blank" class="link-more">Berkas Pemohon</a><br>` : ''}
-                  ${s.arsipSuratUrl ? `<a href="${s.arsipSuratUrl}" target="_blank" class="link-more" style="color:var(--success)">Surat Resmi PDF</a>` : '-'}
-                </td>
-                <td><span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span></td>
-                <td style="white-space:nowrap;">
-                  ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openSuratAdminModal('${s.idSurat}')">Proses</button>` : ''}
-                  ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusSurat('${s.idSurat}')">Hapus</button>` : '-'}
-                </td>
-              </tr>
-            `).join('') || '<tr><td colspan="7">Belum ada data surat.</td></tr>'}
-          </tbody>
+          <tbody id="suratTableBody"></tbody>
         </table>
       </div>
     </div>
   `;
+  filterSurat();
+}
+
+function filterSurat() {
+  const tbody = document.getElementById('suratTableBody');
+  if (!tbody) return;
+  const q = (document.getElementById('searchSuratInput')?.value || '').trim().toLowerCase();
+  const isAdmin = currentUser.role === 'admin';
+
+  const filtered = cache.surat.filter(s =>
+    !q || `${s.idSurat} ${s.pemohon} ${s.wilayah} ${s.jenisSurat} ${s.tujuanSurat} ${s.status} ${s.tanggal}`.toLowerCase().includes(q)
+  );
+
+  tbody.innerHTML = filtered.map(s => `
+    <tr>
+      <td><strong>${s.idSurat}</strong><br><small style="color:var(--muted)">${s.tanggal}</small></td>
+      <td><strong>${s.pemohon}</strong><br><small style="color:var(--muted)">${s.wilayah}</small></td>
+      <td>${s.jenisSurat}</td>
+      <td>${s.tujuanSurat}</td>
+      <td>
+        ${s.berkasPendukungUrl ? `<a href="${s.berkasPendukungUrl}" target="_blank" class="link-more">Berkas Pemohon</a><br>` : ''}
+        ${s.arsipSuratUrl ? `<a href="${s.arsipSuratUrl}" target="_blank" class="link-more" style="color:var(--success)">Surat Resmi PDF</a>` : '-'}
+      </td>
+      <td><span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span></td>
+      <td style="white-space:nowrap;">
+        ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openSuratAdminModal('${s.idSurat}')">Proses</button>` : ''}
+        ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusSurat('${s.idSurat}')">Hapus</button>` : '-'}
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7">Data permohonan surat tidak ditemukan.</td></tr>';
 }
 
 function openSuratModal() {
@@ -669,27 +876,40 @@ async function renderKeuangan(container) {
         <h3>Buku Kas & Laporan Keuangan</h3>
         ${isAdmin ? `<button type="button" class="btn-primary" onclick="openKeuanganModal()"><i data-lucide="plus" class="icon-sm"></i><span>Catat Transaksi</span></button>` : ''}
       </div>
+      ${renderSearchBar('searchKeuInput', 'Cari tanggal, uraian transaksi, bidang/pos, atau pemasukan/pengeluaran...', 'filterKeuangan')}
       <div class="table-wrap">
         <table>
           <thead>
             <tr><th>Tanggal</th><th>Uraian Transaksi</th><th>Bidang / Pos</th><th>Jenis</th><th>Nominal</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr>
           </thead>
-          <tbody>
-            ${cache.keuangan.map(k => `
-              <tr>
-                <td>${k.tanggal}</td>
-                <td><strong>${k.uraian}</strong><br><small style="color:var(--muted)">Ref: ${k.sumberWarta || '-'}</small></td>
-                <td>${k.bidangPos}</td>
-                <td><span class="badge ${k.jenis === 'Pemasukan' ? 'badge-in' : 'badge-out'}">${k.jenis}</span></td>
-                <td><strong>${formatRupiah(k.nominal)}</strong></td>
-                ${isAdmin ? `<td><button type="button" class="btn-danger" onclick="hapusKeuangan('${k.idTransaksi}')">Hapus</button></td>` : ''}
-              </tr>
-            `).join('')}
-          </tbody>
+          <tbody id="keuanganTableBody"></tbody>
         </table>
       </div>
     </div>
   `;
+  filterKeuangan();
+}
+
+function filterKeuangan() {
+  const tbody = document.getElementById('keuanganTableBody');
+  if (!tbody) return;
+  const q = (document.getElementById('searchKeuInput')?.value || '').trim().toLowerCase();
+  const isAdmin = currentUser.role === 'admin';
+
+  const filtered = cache.keuangan.filter(k =>
+    !q || `${k.tanggal} ${k.uraian} ${k.bidangPos} ${k.jenis} ${k.sumberWarta}`.toLowerCase().includes(q)
+  );
+
+  tbody.innerHTML = filtered.map(k => `
+    <tr>
+      <td>${k.tanggal}</td>
+      <td><strong>${k.uraian}</strong><br><small style="color:var(--muted)">Ref: ${k.sumberWarta || '-'}</small></td>
+      <td>${k.bidangPos}</td>
+      <td><span class="badge ${k.jenis === 'Pemasukan' ? 'badge-in' : 'badge-out'}">${k.jenis}</span></td>
+      <td><strong>${formatRupiah(k.nominal)}</strong></td>
+      ${isAdmin ? `<td><button type="button" class="btn-danger" onclick="hapusKeuangan('${k.idTransaksi}')">Hapus</button></td>` : ''}
+    </tr>
+  `).join('') || `<tr><td colspan="${isAdmin ? 6 : 5}">Data transaksi keuangan tidak ditemukan.</td></tr>`;
 }
 
 function openKeuanganModal() {
@@ -740,29 +960,43 @@ async function renderWarta(container) {
         <h3>Arsip Warta Jemaat (${cache.warta.length} Dokumen PDF)</h3>
         ${isAdmin ? `<button type="button" class="btn-primary" onclick="openUploadWartaModal()"><i data-lucide="upload" class="icon-sm"></i><span>Unggah Warta PDF</span></button>` : ''}
       </div>
-      <div class="warta-grid">
-        ${cache.warta.map((w, idx) => `
-          <div class="warta-card">
-            <div class="warta-cover">
-              ${idx === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
-              <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
-            </div>
-            <div class="warta-body">
-              <div class="warta-title">${w.namaFile}</div>
-              <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
-              <div class="warta-actions">
-                <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
-                  <i data-lucide="book-open" class="icon-sm"></i><span>Baca</span>
-                </button>
-                <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh"><i data-lucide="download" class="icon-sm"></i></a>
-                ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusWarta('${w.id}')">Hapus</button>` : ''}
-              </div>
-            </div>
-          </div>
-        `).join('') || '<p>Belum ada Warta Jemaat di folder Google Drive.</p>'}
-      </div>
+      ${renderSearchBar('searchWartaInput', 'Cari judul edisi warta, tanggal, atau bulan (misal: November 2026)...', 'filterWarta')}
+      <div id="wartaGridBody" class="warta-grid"></div>
     </div>
   `;
+  filterWarta();
+}
+
+function filterWarta() {
+  const grid = document.getElementById('wartaGridBody');
+  if (!grid) return;
+  const q = (document.getElementById('searchWartaInput')?.value || '').trim().toLowerCase();
+  const isAdmin = currentUser.role === 'admin';
+
+  const filtered = cache.warta.filter(w =>
+    !q || `${w.namaFile} ${w.bulan} ${w.updatedAt}`.toLowerCase().includes(q)
+  );
+
+  grid.innerHTML = filtered.map((w, idx) => `
+    <div class="warta-card">
+      <div class="warta-cover">
+        ${!q && idx === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
+        <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
+      </div>
+      <div class="warta-body">
+        <div class="warta-title">${w.namaFile}</div>
+        <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
+        <div class="warta-actions">
+          <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
+            <i data-lucide="book-open" class="icon-sm"></i><span>Baca</span>
+          </button>
+          <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh"><i data-lucide="download" class="icon-sm"></i></a>
+          ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusWarta('${w.id}')">Hapus</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--muted);font-size:13.5px;">Edisi Warta Jemaat tidak ditemukan.</p>';
+  renderIcons();
 }
 
 function openUploadWartaModal() {
@@ -809,34 +1043,48 @@ async function renderUsers(container) {
         <h3>Daftar Akun Pengguna (${cache.users.length} Akun)</h3>
         <button type="button" class="btn-primary" onclick="openUserModal()"><i data-lucide="user-plus" class="icon-sm"></i><span>Tambah Akun</span></button>
       </div>
+      ${renderSearchBar('searchUsersInput', 'Cari username, nama pengguna, peran (admin/jemaat), atau wilayah...', 'filterUsers')}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Username</th><th>Nama Pengguna</th><th>Peran</th><th>Wilayah</th><th>No. Induk</th><th>Aksi</th></tr></thead>
-          <tbody>
-            ${cache.users.map(u => `
-              <tr>
-                <td><strong>${u.username}</strong></td>
-                <td>${u.nama}</td>
-                <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
-                <td>${u.wilayah}</td>
-                <td>${u.noInduk || '-'}</td>
-                <td>
-                  ${u.username !== 'admin' ? `<button type="button" class="btn-danger" onclick="hapusUser('${u.username}')">Hapus</button>` : '<small style="color:var(--muted)">Utama</small>'}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
+          <thead><tr><th>Username</th><th>Nama Pengguna</th><th>Email Google</th><th>Peran</th><th>Wilayah</th><th>Aksi</th></tr></thead>
+          <tbody id="usersTableBody"></tbody>
         </table>
       </div>
     </div>
   `;
+  filterUsers();
 }
 
+function filterUsers() {
+  const tbody = document.getElementById('usersTableBody');
+  if (!tbody) return;
+  const q = (document.getElementById('searchUsersInput')?.value || '').trim().toLowerCase();
+
+  const filtered = cache.users.filter(u =>
+    !q || `${u.username} ${u.nama} ${u.email} ${u.role} ${u.wilayah} ${u.noInduk}`.toLowerCase().includes(q)
+  );
+
+  tbody.innerHTML = filtered.map(u => `
+    <tr>
+      <td><strong>${u.username}</strong></td>
+      <td>${u.nama}<br><small style="color:var(--muted)">Induk: ${u.noInduk || '-'}</small></td>
+      <td>${u.email || '-'}</td>
+      <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
+      <td>${u.wilayah}</td>
+      <td>
+        ${u.username !== 'admin' ? `<button type="button" class="btn-danger" onclick="hapusUser('${u.username}')">Hapus</button>` : '<small style="color:var(--muted)">Utama</small>'}
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6">Akun pengguna tidak ditemukan.</td></tr>';
+}
+
+// ================= MODAL & PREVIEW PDF =================
 function openUserModal() {
   openModal('Tambah Akun Login Baru', `
     <form onsubmit="submitUser(event)">
       <div class="input-group"><label>Username</label><input id="usName" required></div>
       <div class="input-group"><label>Kata Sandi</label><input id="usPass" value="123" required></div>
+      <div class="input-group"><label>Email Google (Opsional)</label><input type="email" id="usEmail" placeholder="nama@gmail.com"></div>
       <div class="input-group"><label>Peran (Role)</label>
         <select id="usRole"><option value="jemaat">Jemaat (Warga)</option><option value="admin">Admin / Majelis</option></select>
       </div>
@@ -856,6 +1104,7 @@ async function submitUser(e) {
     action: 'addUser',
     username: document.getElementById('usName').value,
     password: document.getElementById('usPass').value,
+    email: document.getElementById('usEmail').value,
     role: document.getElementById('usRole').value,
     nama: document.getElementById('usNama').value,
     wilayah: document.getElementById('usWilayah').value,
@@ -871,7 +1120,6 @@ async function hapusUser(username) {
   if (res.success) { showToast('Akun dihapus.'); refreshCurrentTab(); }
 }
 
-// ================= MODAL & PREVIEW PDF =================
 function openModal(title, bodyHtml) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;

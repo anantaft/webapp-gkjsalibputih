@@ -3,19 +3,294 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sistem Administrasi Warga — GKJ Salib Putih</title>
+  <title>GKJ Salib Putih — Portal Pelayanan & Administrasi Warga</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- HALAMAN LOGIN -->
-  <div id="loginView" class="login-wrapper">
+  <!-- ================= LANDING PAGE PUBLIK ================= -->
+  <div id="landingView" class="landing-wrapper">
+    <!-- Navbar Publik -->
+    <header class="lp-nav">
+      <div class="lp-container lp-nav-inner">
+        <a href="#beranda" class="lp-brand">
+          <div class="brand-icon"><i data-lucide="church" class="icon-md"></i></div>
+          <div>
+            <strong>GKJ Salib Putih</strong>
+            <span>Klasis Salatiga Bagian Selatan</span>
+          </div>
+        </a>
+
+        <nav id="lpNavMenu" class="lp-links">
+          <a href="#profil" onclick="closeMobileNav()">Profil Gereja</a>
+          <a href="#jadwal" onclick="closeMobileNav()">Jadwal Ibadah</a>
+          <a href="#wilayah" onclick="closeMobileNav()">Wilayah Pelayanan</a>
+          <a href="#warta-publik" onclick="closeMobileNav()">Warta Jemaat</a>
+        </nav>
+
+        <div class="lp-nav-actions">
+          <button type="button" class="btn-primary" onclick="showLoginView()">
+            <i data-lucide="log-in" class="icon-sm"></i>
+            <span>Masuk Portal</span>
+          </button>
+          <button type="button" class="lp-mobile-toggle" aria-label="Buka Menu" onclick="toggleMobileNav()">
+            <i data-lucide="menu" class="icon-md"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Section & Jadwal Ibadah -->
+    <section id="beranda" class="lp-hero">
+      <div class="lp-hero-pattern"></div>
+      <div class="lp-container lp-hero-grid">
+        <div class="lp-hero-copy">
+          <div class="lp-badge">
+            <i data-lucide="sparkles" class="icon-sm"></i>
+            <span>Sistem Informasi & Pelayanan Jemaat</span>
+          </div>
+          <h1>Bertumbuh dalam Kasih, Melayani Sesama dengan Sukacita</h1>
+          <p>
+            Portal resmi Gereja Kristen Jawa (GKJ) Salib Putih untuk informasi jadwal peribadahan, unduhan Warta Jemaat mingguan, pengajuan surat gerejawi, dan transparansi pelayanan warga.
+          </p>
+          <div class="lp-hero-actions">
+            <button type="button" class="btn-hero-solid" onclick="showLoginView()">
+              <i data-lucide="layout-dashboard" class="icon-sm"></i>
+              <span>Masuk Portal Warga / Majelis</span>
+            </button>
+            <a href="#warta-publik" class="btn-lp-ghost">
+              <i data-lucide="book-open" class="icon-sm"></i>
+              <span>Baca Warta Minggu Ini</span>
+            </a>
+          </div>
+          <div id="connectionStatusLanding" class="lp-conn-pill">
+            <span class="status-dot"></span><span>Menghubungkan layanan gereja...</span>
+          </div>
+        </div>
+
+        <!-- Kartu Jadwal Ibadah -->
+        <div id="jadwal" class="lp-hero-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title">
+              <i data-lucide="calendar-clock" class="icon-sm"></i>
+              <span>Jadwal Ibadah Minggu</span>
+            </div>
+            <span class="lp-card-tag">Setiap Minggu</span>
+          </div>
+
+          <div class="lp-schedule-list">
+            <div class="lp-schedule-item">
+              <div class="lp-sch-info">
+                <strong>Ibadah Minggu</strong>
+                <span>Gereja Induk Salib Putih, Pepanthan Warak, Pepanthan Pandanan</span>
+              </div>
+              <span class="lp-time">07.00 WIB</span>
+            </div>
+
+            <div class="lp-schedule-item">
+              <div class="lp-sch-info">
+                <strong>Ibadah Minggu</strong>
+                <span>Panti Wredha Salib Putih, Pepanthan Tetep, Wilayah Kalibeji</span>
+              </div>
+              <span class="lp-time">09.00 WIB</span>
+            </div>
+
+            <div class="lp-schedule-item">
+              <div class="lp-sch-info">
+                <strong>Komisi Pemuda-Remaja</strong>
+                <span>Setiap Hari Sabtu</span>
+              </div>
+              <span class="lp-time">17.00 WIB</span>
+            </div>
+
+            <div class="lp-schedule-item">
+              <div class="lp-sch-info">
+                <strong>Sekolah Minggu</strong>
+                <span>Ruang Komisi Anak & Pemuda-Remaja</span>
+              </div>
+              <span class="lp-time">07.00 WIB</span>
+            </div>
+          </div>
+
+          <div class="lp-card-foot">
+            <i data-lucide="info" class="icon-sm"></i>
+            <span>Pelayanan Sekretariat Majelis: Selasa – Minggu, 08.00 – 14.00 WIB</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Profil Gereja & Galeri Foto -->
+    <section id="profil" class="lp-section lp-section-alt">
+      <div class="lp-container">
+        <div class="lp-profil-grid">
+          <div class="lp-photo-stack">
+            <div class="lp-photo-main">
+              <img
+                src="img/gereja.jpg"
+                alt="Gedung Gereja Induk GKJ Salib Putih"
+              />
+              <div class="lp-photo-caption">
+                <strong>Gedung Gereja Induk GKJ Salib Putih</strong>
+                <span>Jl. Hasanudin KM 4, Bendosari, Salib Putih, Salatiga</span>
+              </div>
+            </div>
+            <div class="lp-photo-subgrid">
+              <div class="lp-photo-thumb">
+                <img
+                  src="img/natal.jpg"
+                  alt="Persekutuan Jemaat"
+                />
+                <span>Persekutuan Jemaat</span>
+              </div>
+              <div class="lp-photo-thumb">
+                <img
+                  src="img/ibadah.JPG"
+                  alt="Ibadah Mingguan"
+                />
+                <span>Ibadah Mingguan</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lp-profil-content">
+            <span class="lp-eyebrow">Tentang Gereja Kami</span>
+            <h2>Mengenal GKJ Salib Putih Salatiga</h2>
+            <p>
+              <strong>Gereja Kristen Jawa (GKJ) Salib Putih</strong> merupakan bagian dari persekutuan Sinode GKJ (Klasis Salatiga Bagian Selatan) yang tumbuh di kawasan bersejarah Salib Putih, lereng Gunung Merbabu, Kota Salatiga.
+            </p>
+            <p>
+              Berakar pada semangat pelayanan sosial-diakonia sejak awal karya pelayanan di Salib Putih, gereja hadir menjadi rumah rohani yang ramah bagi warga jemaat di Gereja Induk, pepanthan, wilayah sekitar, hingga pendampingan di Unit Panti Wredha.
+            </p>
+
+            <div class="lp-profil-highlights">
+              <div class="lp-hl-item">
+                <div class="lp-hl-icon"><i data-lucide="users" class="icon-sm"></i></div>
+                <div>
+                  <strong>6 Wilayah & Pepanthan Aktif</strong>
+                  <span>Gereja Induk, Pandanan, Warak, Tetep, Kalibeji, dan Unit Panti Wredha</span>
+                </div>
+              </div>
+              <div class="lp-hl-item">
+                <div class="lp-hl-icon"><i data-lucide="heart-handshake" class="icon-sm"></i></div>
+                <div>
+                  <strong>Panggilan Bersaksi & Melayani</strong>
+                  <span>Peribadahan kontekstual (Bahasa Indonesia & Jawa) serta pelayanan diakonia warga</span>
+                </div>
+              </div>
+              <div class="lp-hl-item">
+                <div class="lp-hl-icon"><i data-lucide="file-check-2" class="icon-sm"></i></div>
+                <div>
+                  <strong>Layanan Administrasi Terintegrasi</strong>
+                  <span>Pengajuan surat gerejawi, buku induk warga, dan laporan keuangan transparan</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Wilayah & Pepanthan Pelayanan -->
+    <section id="wilayah" class="lp-section">
+      <div class="lp-container">
+        <div class="lp-sec-header">
+          <span class="lp-eyebrow">Jangkauan Pelayanan</span>
+          <h2>Wilayah & Pepanthan Pelayanan</h2>
+          <p>Persekutuan warga jemaat GKJ Salib Putih tersebar di enam wilayah dan pepanthan pelayanan</p>
+        </div>
+
+        <div class="lp-grid-3">
+          <div class="lp-feature-card">
+            <div class="lp-icon-box"><i data-lucide="church" class="icon-md"></i></div>
+            <h3>Gereja Induk Salib Putih</h3>
+            <p>Pusat peribadahan minggu (07.00 & 09.00 WIB), kelas katekisasi, pembinaan komisi, dan kantor sekretariat majelis gereja.</p>
+            <div class="lp-card-meta">Salib Putih</div>
+          </div>
+
+          <div class="lp-feature-card">
+            <div class="lp-icon-box"><i data-lucide="map-pin" class="icon-md"></i></div>
+            <h3>Pepanthan Pandanan, Warak & Tetep</h3>
+            <p>Persekutuan ibadah minggu pukul 07.00 WIB, persekutuan doa wilayah, dan pendampingan pastoral warga pepanthan.</p>
+            <div class="lp-card-meta">3 Pepanthan Pelayanan</div>
+          </div>
+
+          <div class="lp-feature-card">
+            <div class="lp-icon-box"><i data-lucide="heart-handshake" class="icon-md"></i></div>
+            <h3>Wilayah Kalibeji & Panti Wredha</h3>
+            <p>Pelayanan diakonia warga, persekutuan wilayah Kalibeji, serta ibadah dan pendampingan rohani di Unit Panti Wredha.</p>
+            <div class="lp-card-meta">2 Wilayah Pelayanan Khusus</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Warta Jemaat Publik -->
+    <section id="warta-publik" class="lp-section lp-section-alt">
+      <div class="lp-container">
+        <div class="lp-sec-header-row">
+          <div>
+            <span class="lp-eyebrow">Publikasi Mingguan</span>
+            <h2>Warta Jemaat Terbaru</h2>
+            <p>Baca langsung atau unduh edisi Warta Jemaat & Tata Ibadah GKJ Salib Putih</p>
+          </div>
+          <button type="button" class="btn-outline" onclick="showLoginView()">
+            <span>Arsip Lengkap di Portal</span>
+            <i data-lucide="arrow-right" class="icon-sm"></i>
+          </button>
+        </div>
+
+        <div id="landingWartaGrid" class="warta-grid">
+          <div class="card">Memuat Warta Jemaat terbaru dari Google Drive...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Banner Ajakan Masuk Portal -->
+    <section class="lp-cta-section">
+      <div class="lp-container">
+        <div class="lp-cta-box">
+          <div>
+            <h3>Layanan Administrasi Digital Warga Jemaat</h3>
+            <p>Masuk ke Portal Warga untuk mengajukan surat keterangan/pengantar nikah, melihat riwayat berkas, dan memantau laporan keuangan gereja.</p>
+          </div>
+          <button type="button" class="btn-hero-solid" onclick="showLoginView()">
+            <i data-lucide="log-in" class="icon-sm"></i>
+            <span>Masuk Sekarang</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="lp-footer">
+      <div class="lp-container lp-footer-inner">
+        <div>
+          <strong>Gereja Kristen Jawa (GKJ) Salib Putih</strong>
+          <p>Jl. Hasanudin KM 4, Salib Putih, Kota Salatiga, Jawa Tengah</p>
+        </div>
+        <div class="lp-footer-links">
+          <a href="#profil">Profil</a>
+          <a href="#jadwal">Jadwal</a>
+          <a href="#wilayah">Wilayah</a>
+          <a href="#warta-publik">Warta</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ================= HALAMAN LOGIN ================= -->
+  <div id="loginView" class="login-wrapper hidden">
     <div class="login-card">
-      <div class="brand-badge">
-        <i data-lucide="church" class="icon-xs"></i>
+      <div style="text-align:left;margin-bottom:14px;">
+        <button type="button" class="link-more" onclick="showLandingView()">← Kembali ke Beranda</button>
+      </div>
+      <div class="login-badge">
+        <i data-lucide="church" class="icon-sm"></i>
         <span>GKJ SALIB PUTIH</span>
       </div>
       <h1>Sistem Administrasi Warga</h1>
@@ -26,7 +301,7 @@
         <span>Memeriksa koneksi Google Sheets...</span>
       </div>
 
-      <form id="loginForm" class="form-stack">
+      <form id="loginForm" class="form-stack" onsubmit="handleLogin(event)">
         <div class="input-group">
           <label for="loginUsername">Username</label>
           <input type="text" id="loginUsername" placeholder="Contoh: admin atau jemaat" required />
@@ -41,80 +316,64 @@
         </button>
       </form>
 
-      <div class="demo-hint">
+      <div class="demo-box">
         <strong>Akun Demo:</strong><br>
         Admin: <code>admin</code> / <code>123</code> &nbsp;|&nbsp; Jemaat: <code>jemaat</code> / <code>123</code>
       </div>
     </div>
   </div>
 
-  <!-- DASHBOARD UTAMA -->
+  <!-- ================= DASHBOARD APLIKASI ================= -->
   <div id="appShell" class="app-shell hidden">
-    <!-- Sidebar Desktop -->
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo-mark">
-          <i data-lucide="church" class="icon-md"></i>
-        </div>
+      <div class="sidebar-brand">
+        <div class="brand-icon"><i data-lucide="church" class="icon-md"></i></div>
         <div>
-          <div class="org-title">GKJ Salib Putih</div>
-          <div class="org-sub" id="roleBadgeSidebar">Portal Warga</div>
+          <strong>GKJ Salib Putih</strong>
+          <span id="roleBadgeSidebar">Portal Pelayanan</span>
         </div>
       </div>
-
-      <nav id="sidebarNav" class="nav-list"></nav>
-
+      <nav id="sidebarNav" class="sidebar-nav"></nav>
       <div class="sidebar-footer">
         <div class="user-card">
-          <div class="user-name" id="userNameDisplay">-</div>
-          <div class="user-wilayah" id="userWilayahDisplay">-</div>
+          <strong id="userNameDisplay">-</strong>
+          <span id="userWilayahDisplay">-</span>
         </div>
-        <button onclick="logout()" class="btn-logout">
+        <button type="button" onclick="logout()" class="btn-logout">
           <i data-lucide="log-out" class="icon-sm"></i>
           <span>Keluar</span>
         </button>
       </div>
     </aside>
 
-    <!-- Area Konten Utama -->
     <main class="main-area">
       <header class="topbar">
         <div>
-          <h2 id="pageTitle">Beranda</h2>
-          <p id="pageDesc" class="topbar-sub">Sistem Administrasi Warga GKJ Salib Putih</p>
+          <h2 id="pageTitle">Dashboard</h2>
+          <p id="pageDesc">Sistem Informasi Manajemen Jemaat GKJ Salib Putih</p>
         </div>
-        <div class="topbar-actions">
-          <button onclick="refreshCurrentTab()" class="btn-outline" title="Muat Ulang Data">
-            <i data-lucide="refresh-cw" class="icon-sm"></i>
-            <span>Segarkan</span>
-          </button>
-          <button onclick="logout()" class="btn-outline mobile-only" title="Keluar">
-            <i data-lucide="log-out" class="icon-sm"></i>
-          </button>
-        </div>
+        <button type="button" onclick="refreshCurrentTab()" class="btn-outline" title="Segarkan Data">
+          <i data-lucide="refresh-cw" class="icon-sm"></i>
+          <span>Segarkan</span>
+        </button>
       </header>
-
-      <div id="contentContainer" class="content-container"></div>
+      <div id="contentContainer" class="content-body"></div>
     </main>
 
-    <!-- Navigasi Bawah Khusus Mobile -->
     <nav id="bottomNav" class="bottom-nav"></nav>
   </div>
 
-  <!-- MODAL UNIVERSAL -->
+  <!-- ================= MODAL GLOBAL ================= -->
   <div id="modalOverlay" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="modalTitle">Form Data</h3>
-        <button onclick="closeModal()" class="modal-close" aria-label="Tutup">
-          <i data-lucide="x" class="icon-md"></i>
-        </button>
+        <h3 id="modalTitle">Judul Modal</h3>
+        <button type="button" onclick="closeModal()" class="btn-icon"><i data-lucide="x" class="icon-md"></i></button>
       </div>
-      <div id="modalBody" class="modal-body"></div>
+      <div id="modalBody"></div>
     </div>
   </div>
 
-  <!-- TOAST NOTIFIKASI -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>

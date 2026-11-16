@@ -1,8 +1,5 @@
+// ================= KONFIGURASI URL APPS SCRIPT =================
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxWEJ8rfi_18QdKJ8RWzjftTLsLEsW8ce4gN5o7B5E0nwpYYjOxj-M7tqNb-0aRzY37iQ/exec';
-
-let currentUser = null;
-let activeTab = '';
-let cache = { jemaat: [], users: [], surat: [], keuangan: [], warta: [] };
 
 const WILAYAH_LIST = [
   'Gereja Induk Salib Putih',
@@ -14,27 +11,70 @@ const WILAYAH_LIST = [
 ];
 
 const JENIS_SURAT_LIST = [
-  { title: 'Surat Pengantar Nikah', desc: 'Pernikahan Kudus / Catatan Sipil' },
-  { title: 'Surat Baptis Anak / Dewasa', desc: 'Pelayanan Sakramen Baptis' },
-  { title: 'Surat Pengakuan Percaya (Sidi)', desc: 'Peneguhan Sidi Jemaat' },
-  { title: 'Surat Atestasi Masuk / Keluar', desc: 'Pindah Domisili / Keanggotaan' },
-  { title: 'Surat Keterangan Warga', desc: 'Surat Keterangan Keanggotaan Aktif' }
+  'Surat Keterangan Warga',
+  'Surat Pengantar Nikah',
+  'Surat Pengantar Baptis / Sidi',
+  'Surat Atestasi Keluar',
+  'Surat Keterangan Kematian'
 ];
 
+let currentUser = null;
+let activeTab = 'dashboard';
+let cache = { jemaat: [], users: [], surat: [], keuangan: [], warta: [] };
+
 function renderIcons() {
-  try {
-    if (window.lucide && typeof lucide.createIcons === 'function') {
-      lucide.createIcons();
-    }
-  } catch (err) {
-    console.warn('Lucide icon skipped:', err);
-  }
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-// ================= INISIALISASI & AUTH =================
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.background = isError ? '#dc2626' : '#0f172a';
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3200);
+}
+
+function formatRupiah(num) {
+  return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ================= NAVIGASI LANDING, LOGIN & SHELL =================
+function toggleMobileNav() {
+  const nav = document.getElementById('lpNavMenu');
+  if (nav) nav.classList.toggle('open');
+}
+
+function closeMobileNav() {
+  const nav = document.getElementById('lpNavMenu');
+  if (nav) nav.classList.remove('open');
+}
+
+function showLandingView() {
+  document.getElementById('landingView').classList.remove('hidden');
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appShell').classList.add('hidden');
+  renderIcons();
+}
+
+function showLoginView() {
+  document.getElementById('landingView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('appShell').classList.add('hidden');
+  renderIcons();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderIcons();
-  checkConnection();
   const saved = localStorage.getItem('gkjsp_user');
   if (saved) {
     try {
@@ -47,105 +87,149 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {}
     localStorage.removeItem('gkjsp_user');
   }
+  showLandingView();
+  loadLandingData();
 });
 
-async function checkConnection() {
+async function loadLandingData() {
   const pill = document.getElementById('connectionStatus');
-  if (!pill) return;
+  const lpPill = document.getElementById('connectionStatusLanding');
+  const grid = document.getElementById('landingWartaGrid');
+
   try {
     const res = await fetch(`${GAS_WEB_APP_URL}?action=getWarta`);
     const json = await res.json();
     if (json.success !== undefined) {
-      pill.className = 'status-pill status-ok';
-      pill.innerHTML = `<span class="status-dot"></span><span>Terhubung ke Google Sheets & Drive Live</span>`;
+      if (pill) {
+        pill.className = 'status-pill status-ok';
+        pill.innerHTML = `<span class="status-dot"></span><span>Terhubung ke Google Sheets & Drive Live</span>`;
+      }
+      if (lpPill) {
+        lpPill.innerHTML = `<span class="status-dot" style="background:#4ade80;"></span><span>Terhubung ke Layanan Digital GKJ Salib Putih</span>`;
+      }
+      const list = (json.data || []).slice(0, 3);
+      if (grid) {
+        grid.innerHTML = list.length ? list.map((w, idx) => `
+          <div class="warta-card">
+            <div class="warta-cover">
+              ${idx === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
+              <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
+            </div>
+            <div class="warta-body">
+              <div class="warta-title">${w.namaFile}</div>
+              <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
+              <div class="warta-actions">
+                <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
+                  <i data-lucide="book-open" class="icon-sm"></i>
+                  <span>Baca Warta</span>
+                </button>
+                <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh PDF">
+                  <i data-lucide="download" class="icon-sm"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        `).join('') : '<div class="card">Belum ada edisi Warta Jemaat yang dipublikasikan.</div>';
+        renderIcons();
+      }
     }
   } catch (e) {
-    pill.className = 'status-pill status-err';
-    pill.innerHTML = `<span class="status-dot"></span><span>Gagal terhubung — periksa URL Web App di app.js</span>`;
+    if (pill) {
+      pill.className = 'status-pill status-err';
+      pill.innerHTML = `<span class="status-dot"></span><span>Gagal terhubung — periksa URL Web App di app.js</span>`;
+    }
+    if (lpPill) {
+      lpPill.innerHTML = `<span class="status-dot" style="background:#f87171;"></span><span>Koneksi server tertunda</span>`;
+    }
   }
 }
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+// ================= PROSES LOGIN =================
+async function handleLogin(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
   const btn = document.getElementById('btnLogin');
-  btn.innerHTML = `<span>Memverifikasi...</span>`;
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+
+  if (!username || !password) {
+    showToast('Harap isi Username dan Kata Sandi.', true);
+    return;
+  }
+
   btn.disabled = true;
+  btn.innerHTML = '<span>Memverifikasi akun...</span>';
 
   try {
-    const res = await apiPost({
-      action: 'login',
-      username: document.getElementById('loginUsername').value,
-      password: document.getElementById('loginPassword').value
+    const res = await fetch(GAS_WEB_APP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'login', username, password })
     });
-    if (res.success) {
-      currentUser = res.user;
+    const json = await res.json();
+
+    if (json.success && json.user) {
+      currentUser = json.user;
       localStorage.setItem('gkjsp_user', JSON.stringify(currentUser));
       initApp();
     } else {
-      showToast(res.message || 'Login gagal');
+      showToast(json.message || 'Username atau kata sandi salah.', true);
     }
   } catch (err) {
-    showToast('Terjadi kesalahan koneksi.');
+    showToast('Gagal terhubung ke server Google Apps Script.', true);
   } finally {
-    btn.innerHTML = `<i data-lucide="log-in" class="icon-sm"></i><span>Masuk ke Sistem</span>`;
     btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="log-in" class="icon-sm"></i><span>Masuk ke Sistem</span>';
     renderIcons();
   }
-});
+}
 
 function logout() {
   localStorage.removeItem('gkjsp_user');
-  location.reload();
+  currentUser = null;
+  showLandingView();
+  loadLandingData();
 }
 
+// ================= INISIALISASI DASHBOARD =================
 function initApp() {
+  document.getElementById('landingView').classList.add('hidden');
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('appShell').classList.remove('hidden');
 
-  const role = String(currentUser.role || 'jemaat').trim().toLowerCase();
-  currentUser.role = role;
+  const isAdmin = currentUser.role === 'admin';
+  document.getElementById('roleBadgeSidebar').textContent = isAdmin ? 'Admin / Majelis' : 'Portal Warga Jemaat';
+  document.getElementById('userNameDisplay').textContent = currentUser.nama;
+  document.getElementById('userWilayahDisplay').textContent = currentUser.wilayah;
 
-  document.getElementById('userNameDisplay').textContent = currentUser.nama || currentUser.username || 'Pengguna';
-  document.getElementById('userWilayahDisplay').textContent = currentUser.wilayah || 'GKJ Salib Putih';
-  document.getElementById('roleBadgeSidebar').textContent =
-    role === 'admin' ? 'Panel Sekretariat & Majelis' : 'Portal Warga Jemaat';
+  const menus = isAdmin ? [
+    { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+    { id: 'jemaat', label: 'Data Jemaat', icon: 'users' },
+    { id: 'surat', label: 'Layanan Surat', icon: 'file-text' },
+    { id: 'keuangan', label: 'Keuangan Gereja', icon: 'wallet' },
+    { id: 'warta', label: 'Warta Jemaat', icon: 'book-open' },
+    { id: 'users', label: 'Manajemen Akun', icon: 'shield-check' }
+  ] : [
+    { id: 'dashboard', label: 'Beranda Warga', icon: 'layout-dashboard' },
+    { id: 'surat', label: 'Pengajuan Surat', icon: 'file-plus' },
+    { id: 'warta', label: 'Warta Jemaat', icon: 'book-open' },
+    { id: 'keuangan', label: 'Laporan Keuangan', icon: 'wallet' }
+  ];
 
-  const menus = role === 'admin'
-    ? [
-        { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
-        { id: 'jemaat', icon: 'users', label: 'Data Jemaat' },
-        { id: 'users', icon: 'shield-check', label: 'Manajemen Akun' },
-        { id: 'surat', icon: 'file-text', label: 'Layanan Surat' },
-        { id: 'keuangan', icon: 'wallet', label: 'Keuangan' },
-        { id: 'warta', icon: 'newspaper', label: 'Warta Jemaat' }
-      ]
-    : [
-        { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
-        { id: 'jemaat', icon: 'users', label: 'Data Jemaat' },
-        { id: 'surat', icon: 'file-plus-2', label: 'Pengajuan Surat' },
-        { id: 'warta', icon: 'newspaper', label: 'Warta Jemaat' },
-        { id: 'keuangan', icon: 'pie-chart', label: 'Info Keuangan' }
-      ];
-
-  const sideNav = document.getElementById('sidebarNav');
-  const botNav = document.getElementById('bottomNav');
-
-  sideNav.innerHTML = menus.map(m => `
+  document.getElementById('sidebarNav').innerHTML = menus.map(m => `
     <button type="button" class="nav-item" data-tab="${m.id}" onclick="switchTab('${m.id}')">
       <i data-lucide="${m.icon}" class="icon-sm"></i>
       <span>${m.label}</span>
     </button>
   `).join('');
 
-  botNav.innerHTML = menus.map(m => `
+  document.getElementById('bottomNav').innerHTML = menus.slice(0, 5).map(m => `
     <button type="button" data-tab="${m.id}" onclick="switchTab('${m.id}')">
-      <i data-lucide="${m.icon}" class="icon-md"></i>
-      <span>${m.label}</span>
+      <i data-lucide="${m.icon}" class="icon-sm"></i>
+      <span>${m.label.split(' ')[0]}</span>
     </button>
   `).join('');
 
-  renderIcons();
-  switchTab(menus[0].id);
+  switchTab('dashboard');
 }
 
 function switchTab(tabId) {
@@ -153,22 +237,23 @@ function switchTab(tabId) {
   document.querySelectorAll('[data-tab]').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === tabId);
   });
+
+  const titles = {
+    dashboard: ['Dashboard Utama', 'Ringkasan Pelayanan & Administrasi GKJ Salib Putih'],
+    jemaat: ['Buku Induk & Data Jemaat', 'Kelola data warga jemaat seluruh wilayah & pepanthan'],
+    surat: ['Layanan Administrasi Surat', 'Pengajuan, verifikasi, dan arsip surat keterangan gerejawi'],
+    keuangan: ['Laporan Keuangan Gereja', 'Transparansi pemasukan persembahan & pengeluaran bidang'],
+    warta: ['Warta Jemaat & Tata Ibadah', 'Arsip digital Warta Jemaat GKJ Salib Putih'],
+    users: ['Manajemen Akun Pengguna', 'Kelola akun login Admin Majelis dan Warga Jemaat']
+  };
+  document.getElementById('pageTitle').textContent = titles[tabId][0];
+  document.getElementById('pageDesc').textContent = titles[tabId][1];
   refreshCurrentTab();
 }
 
-function refreshCurrentTab() {
-  if (activeTab === 'dashboard') renderDashboard();
-  else if (activeTab === 'jemaat') renderJemaat();
-  else if (activeTab === 'users') renderUsers();
-  else if (activeTab === 'surat') renderSurat();
-  else if (activeTab === 'keuangan') renderKeuangan();
-  else if (activeTab === 'warta') renderWarta();
-}
-
-// ================= API HELPER =================
 async function apiGet(action) {
   const res = await fetch(`${GAS_WEB_APP_URL}?action=${action}`);
-  return res.json();
+  return await res.json();
 }
 
 async function apiPost(payload) {
@@ -176,978 +261,617 @@ async function apiPost(payload) {
     method: 'POST',
     body: JSON.stringify(payload)
   });
-  return res.json();
+  return await res.json();
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// ================= 0. MODUL DASHBOARD RINGKASAN =================
-async function renderDashboard() {
-  const isAdmin = currentUser.role === 'admin';
-  document.getElementById('pageTitle').textContent = 'Dashboard Utama';
-  document.getElementById('pageDesc').textContent = 'Ringkasan informasi pelayanan, warta jemaat, dan administrasi GKJ Salib Putih';
-
+async function refreshCurrentTab() {
   const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat ringkasan data pelayanan...</div>`;
+  container.innerHTML = `<div class="card">Memuat data terbaru dari server...</div>`;
 
+  try {
+    if (activeTab === 'dashboard') await renderDashboard(container);
+    else if (activeTab === 'jemaat') await renderJemaat(container);
+    else if (activeTab === 'surat') await renderSurat(container);
+    else if (activeTab === 'keuangan') await renderKeuangan(container);
+    else if (activeTab === 'warta') await renderWarta(container);
+    else if (activeTab === 'users') await renderUsers(container);
+    renderIcons();
+  } catch (err) {
+    container.innerHTML = `<div class="card">Terjadi kesalahan saat memuat data: ${err.message}</div>`;
+  }
+}
+
+// ================= 1. DASHBOARD =================
+async function renderDashboard(container) {
   const [resJemaat, resSurat, resKeu, resWarta] = await Promise.all([
-    apiGet('getJemaat'),
-    apiGet('getSurat'),
-    apiGet('getKeuangan'),
-    apiGet('getWarta')
+    apiGet('getJemaat'), apiGet('getSurat'), apiGet('getKeuangan'), apiGet('getWarta')
   ]);
-
   cache.jemaat = resJemaat.data || [];
   cache.surat = resSurat.data || [];
   cache.keuangan = resKeu.data || [];
   cache.warta = resWarta.data || [];
 
-  const masuk = cache.keuangan.filter(k => k.jenis === 'Pemasukan').reduce((a, b) => a + b.nominal, 0);
-  const keluar = cache.keuangan.filter(k => k.jenis === 'Pengeluaran').reduce((a, b) => a + b.nominal, 0);
-  const saldo = masuk - keluar;
+  const isAdmin = currentUser.role === 'admin';
+  const totalIn = cache.keuangan.filter(k => k.jenis === 'Pemasukan').reduce((a, b) => a + Number(b.nominal), 0);
+  const totalOut = cache.keuangan.filter(k => k.jenis === 'Pengeluaran').reduce((a, b) => a + Number(b.nominal), 0);
+  const saldo = totalIn - totalOut;
   const suratProses = cache.surat.filter(s => s.status === 'Proses').length;
 
-  const todayStr = new Date().toLocaleDateString('id-ID', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-
-  const totalWarga = cache.jemaat.length || 1;
-  const wilayahStats = WILAYAH_LIST.map(w => {
-    const cleanKey = w.replace('Gereja ', '').toLowerCase();
-    const count = cache.jemaat.filter(j =>
-      String(j.wilayah).toLowerCase().includes(cleanKey) || j.wilayah === w
-    ).length;
-    return { name: w, count, pct: Math.round((count / totalWarga) * 100) };
-  }).filter(x => x.count > 0);
-
-  const topWarta = cache.warta.slice(0, 3);
-  const recentSurat = cache.surat.slice(0, 4);
-  const recentKeu = cache.keuangan.slice(0, 4);
+  const wilayahCounts = WILAYAH_LIST.map(w => ({
+    nama: w,
+    jumlah: cache.jemaat.filter(j => j.wilayah === w).length
+  }));
+  const maxW = Math.max(...wilayahCounts.map(w => w.jumlah), 1);
 
   container.innerHTML = `
-    <div class="welcome-banner">
+    <div class="hero-banner">
       <div>
-        <h3>Selamat Datang, ${currentUser.nama}</h3>
-        <p>${currentUser.wilayah} • ${todayStr}</p>
+        <span class="hero-tag">${isAdmin ? 'Panel Majelis & Sekretariat' : 'Portal Warga Jemaat'}</span>
+        <h3>Sugeng Rawuh, ${currentUser.nama}</h3>
+        <p>${currentUser.wilayah} • Nomor Induk: ${currentUser.noInduk || '-'}</p>
       </div>
-      <div class="welcome-actions">
-        <span class="welcome-pill"><i data-lucide="calendar" class="icon-sm"></i> Ibadah Minggu: 07.00 & 09.00 WIB</span>
-        <button class="btn-banner-white" onclick="switchTab('surat')">
-          <i data-lucide="file-plus-2" class="icon-sm"></i>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="btn-banner-white" onclick="switchTab('surat')">
+          <i data-lucide="file-plus" class="icon-sm"></i>
           <span>${isAdmin ? 'Kelola Surat' : 'Ajukan Surat'}</span>
+        </button>
+        <button type="button" class="btn-banner-white" onclick="switchTab('warta')">
+          <i data-lucide="book-open" class="icon-sm"></i>
+          <span>Baca Warta</span>
         </button>
       </div>
     </div>
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="users" class="icon-xs" style="color:#1e3a8a;"></i> Total Warga Jemaat</div>
-        <div class="stat-val" style="color:#1e3a8a;">${cache.jemaat.length} Jiwa</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-blue"><i data-lucide="users" class="icon-md"></i></div>
+        <div>
+          <div class="kpi-label">Total Warga Jemaat</div>
+          <div class="kpi-value">${cache.jemaat.length} Jiwa</div>
+          <div class="kpi-sub">Tersebar di 6 Wilayah & Pepanthan</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="file-clock" class="icon-xs" style="color:#c2410c;"></i> Surat Dalam Proses</div>
-        <div class="stat-val" style="color:#c2410c;">${suratProses} Permohonan</div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-amber"><i data-lucide="file-clock" class="icon-md"></i></div>
+        <div>
+          <div class="kpi-label">Permohonan Surat</div>
+          <div class="kpi-value">${suratProses} Proses</div>
+          <div class="kpi-sub">Total ${cache.surat.length} pengajuan tercatat</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="landmark" class="icon-xs" style="color:#15803d;"></i> Saldo Kas Tercatat</div>
-        <div class="stat-val" style="color:#15803d;">Rp ${saldo.toLocaleString('id-ID')}</div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-emerald"><i data-lucide="wallet" class="icon-md"></i></div>
+        <div>
+          <div class="kpi-label">Saldo Kas Gereja</div>
+          <div class="kpi-value">${formatRupiah(saldo)}</div>
+          <div class="kpi-sub">Masuk: ${formatRupiah(totalIn)}</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="newspaper" class="icon-xs" style="color:#0f766e;"></i> Arsip Warta Jemaat</div>
-        <div class="stat-val" style="color:#0f766e;">${cache.warta.length} Edisi</div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-rose"><i data-lucide="book-open" class="icon-md"></i></div>
+        <div>
+          <div class="kpi-label">Edisi Warta Jemaat</div>
+          <div class="kpi-value">${cache.warta.length} Edisi</div>
+          <div class="kpi-sub">Tersimpan di Arsip Google Drive</div>
+        </div>
       </div>
     </div>
 
-    <div class="dash-main-grid">
-      <div class="dash-col">
-        <div class="card">
-          <div class="section-head">
-            <h3><i data-lucide="newspaper" class="icon-sm" style="color:var(--primary);"></i> Warta Jemaat Terbaru</h3>
-            <button class="link-more" onclick="switchTab('warta')">Lihat Semua →</button>
-          </div>
-          ${topWarta.length ? `
-            <div class="mini-warta-grid">
-              ${topWarta.map(w => `
-                <div class="mini-warta-card">
-                  <div class="mini-warta-cover">
-                    <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/300x400/e2e8f0/1e3a8a?text=Warta+GKJSP'">
-                  </div>
-                  <div class="mini-warta-info">
-                    <div>
-                      <div class="mini-warta-title" title="${w.namaFile}">${w.namaFile}</div>
-                      <div class="mini-warta-sub">${w.bulan}</div>
-                    </div>
-                    <button class="btn-buka" style="padding:7px 10px;font-size:12px;" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
-                      <i data-lucide="book-open" class="icon-xs"></i> Baca Warta
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : '<p style="font-size:13px;color:var(--muted);">Belum ada warta tersedia.</p>'}
+    <div class="dash-grid-2">
+      <div class="card">
+        <div class="card-header">
+          <h3>Sebaran Jemaat per Wilayah & Pepanthan</h3>
+          ${isAdmin ? `<button type="button" class="link-more" onclick="switchTab('jemaat')">Lihat Buku Induk →</button>` : ''}
         </div>
-
-        <div class="card">
-          <div class="section-head">
-            <h3><i data-lucide="wallet" class="icon-sm" style="color:var(--accent);"></i> Mutasi Kas Terakhir</h3>
-            <button class="link-more" onclick="switchTab('keuangan')">Buku Kas →</button>
+        ${wilayahCounts.map(w => `
+          <div class="wilayah-row">
+            <div class="wilayah-meta"><span>${w.nama}</span><span>${w.jumlah} Jiwa</span></div>
+            <div class="progress-track"><div class="progress-fill" style="width:${Math.round((w.jumlah / maxW) * 100)}%"></div></div>
           </div>
-          <div class="activity-list">
-            ${recentKeu.length ? recentKeu.map(k => `
-              <div class="activity-row">
-                <div>
-                  <div class="activity-title">${k.uraian}</div>
-                  <div class="activity-sub">${k.tanggal} • ${k.bidangPos}</div>
-                </div>
-                <div style="font-weight:800;white-space:nowrap;color:${k.jenis === 'Pemasukan' ? '#15803d' : '#b91c1c'};">
-                  ${k.jenis === 'Pemasukan' ? '+' : '-'} Rp ${Number(k.nominal).toLocaleString('id-ID')}
-                </div>
-              </div>
-            `).join('') : '<p style="font-size:13px;color:var(--muted);">Belum ada catatan transaksi.</p>'}
-          </div>
-        </div>
+        `).join('')}
       </div>
 
-      <div class="dash-col">
-        <div class="card">
-          <div class="section-head">
-            <h3><i data-lucide="church" class="icon-sm" style="color:var(--primary);"></i> Sebaran Warga per Wilayah</h3>
-            <button class="link-more" onclick="switchTab('jemaat')">Direktori →</button>
-          </div>
-          <div>
-            ${wilayahStats.length ? wilayahStats.map(ws => `
-              <div class="wilayah-row">
-                <div class="wilayah-meta">
-                  <span>${ws.name}</span>
-                  <span class="wilayah-count">${ws.count} Jiwa (${ws.pct}%)</span>
-                </div>
-                <div class="progress-track">
-                  <div class="progress-fill" style="width:${ws.pct}%;"></div>
-                </div>
-              </div>
-            `).join('') : '<p style="font-size:13px;color:var(--muted);">Data wilayah belum tersedia.</p>'}
-          </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Permohonan Surat Terbaru</h3>
+          <button type="button" class="link-more" onclick="switchTab('surat')">Semua Surat →</button>
         </div>
-
-        <div class="card">
-          <div class="section-head">
-            <h3><i data-lucide="file-text" class="icon-sm" style="color:var(--primary);"></i> Permohonan Surat Terbaru</h3>
-            <button class="link-more" onclick="switchTab('surat')">Semua Surat →</button>
-          </div>
-          <div class="activity-list">
-            ${recentSurat.length ? recentSurat.map(s => `
-              <div class="activity-row">
-                <div>
-                  <div class="activity-title">${s.jenisSurat}</div>
-                  <div class="activity-sub">${s.pemohon} • ${s.tanggal}</div>
-                </div>
-                <span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : 'badge-proses'}">${s.status}</span>
+        <div class="activity-list">
+          ${cache.surat.slice(0, 4).map(s => `
+            <div class="activity-item">
+              <div>
+                <strong>${s.jenisSurat}</strong>
+                <span>${s.pemohon} • ${s.tanggal}</span>
               </div>
-            `).join('') : '<p style="font-size:13px;color:var(--muted);">Belum ada permohonan surat.</p>'}
-          </div>
+              <span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : 'badge-proses'}">${s.status}</span>
+            </div>
+          `).join('') || '<p style="font-size:13px;color:var(--muted);">Belum ada permohonan surat.</p>'}
         </div>
       </div>
     </div>
   `;
-  renderIcons();
 }
 
-// ================= 1. MODUL DATA JEMAAT =================
-async function renderJemaat() {
-  const isAdmin = currentUser.role === 'admin';
-  document.getElementById('pageTitle').textContent = isAdmin ? 'Manajemen Data Jemaat' : 'Direktori Warga Jemaat';
-  document.getElementById('pageDesc').textContent = isAdmin
-    ? 'Kelola data induk warga jemaat seluruh wilayah & pepanthan'
-    : 'Daftar nama warga jemaat dan wilayah pelayanan GKJ Salib Putih';
-
-  const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat data jemaat...</div>`;
-
+// ================= 2. DATA JEMAAT =================
+async function renderJemaat(container) {
   const res = await apiGet('getJemaat');
   cache.jemaat = res.data || [];
 
   container.innerHTML = `
     <div class="card">
-      <div class="toolbar">
-        <div class="search-box">
-          <i data-lucide="search" class="icon-sm"></i>
-          <input type="text" id="searchJemaat" class="search-input" placeholder="Cari nama warga atau wilayah..." oninput="filterJemaatTable()" />
-        </div>
-        ${isAdmin ? `
-          <button class="btn-primary" onclick="openJemaatModal()">
-            <i data-lucide="user-plus" class="icon-sm"></i>
-            <span>Tambah Warga Jemaat</span>
-          </button>` : ''}
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            ${isAdmin
-              ? `<tr><th>No. Induk</th><th>Nama Lengkap</th><th>L/P</th><th>Wilayah / Pepanthan</th><th>Baptis/Sidi</th><th>No. HP</th><th>Aksi</th></tr>`
-              : `<tr><th>No.</th><th>Nama Lengkap Warga</th><th>Wilayah / Pepanthan</th></tr>`}
-          </thead>
-          <tbody id="jemaatTbody"></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  filterJemaatTable();
-}
-
-function filterJemaatTable() {
-  const isAdmin = currentUser.role === 'admin';
-  const q = (document.getElementById('searchJemaat')?.value || '').toLowerCase();
-  const filtered = cache.jemaat.filter(j =>
-    String(j.nama).toLowerCase().includes(q) || String(j.wilayah).toLowerCase().includes(q)
-  );
-
-  const tbody = document.getElementById('jemaatTbody');
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7">Tidak ada data ditemukan.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered.map((j, idx) => isAdmin
-    ? `<tr>
-        <td><strong>${j.noInduk}</strong></td>
-        <td>${j.nama}</td>
-        <td>${j.jenisKelamin}</td>
-        <td>${j.wilayah}</td>
-        <td>${j.statusBaptisSidi}</td>
-        <td>${j.noHP}</td>
-        <td>
-          <div style="display:flex;gap:6px;">
-            <button class="btn-sm btn-edit" onclick="openJemaatModal('${j.noInduk}')"><i data-lucide="pencil" class="icon-xs"></i> Edit</button>
-            <button class="btn-sm btn-del" onclick="deleteJemaat('${j.noInduk}')"><i data-lucide="trash-2" class="icon-xs"></i> Hapus</button>
-          </div>
-        </td>
-      </tr>`
-    : `<tr>
-        <td>${idx + 1}</td>
-        <td><strong>${j.nama}</strong></td>
-        <td><span class="badge" style="background:#eff6ff;color:#1e3a8a;"><i data-lucide="church" class="icon-xs"></i> ${j.wilayah}</span></td>
-      </tr>`
-  ).join('');
-  renderIcons();
-}
-
-function openJemaatModal(noInduk = null) {
-  const item = noInduk ? cache.jemaat.find(x => x.noInduk === noInduk) : null;
-  openModal(item ? 'Edit Data Jemaat' : 'Tambah Data Jemaat Baru', `
-    <form id="formJemaat" class="form-stack">
-      <div class="input-group"><label>No. Kartu Keluarga (KK)</label><input name="noKK" value="${item?.noKK || 'KK-GKJSP-'}" required></div>
-      <div class="input-group"><label>Nama Lengkap</label><input name="nama" value="${item?.nama || ''}" required></div>
-      <div class="input-group"><label>Jenis Kelamin</label>
-        <select name="jenisKelamin">
-          <option value="L" ${item?.jenisKelamin === 'L' ? 'selected' : ''}>Laki-laki (L)</option>
-          <option value="P" ${item?.jenisKelamin === 'P' ? 'selected' : ''}>Perempuan (P)</option>
-        </select>
-      </div>
-      <div class="input-group"><label>Tempat, Tanggal Lahir</label><input name="tempatTglLahir" value="${item?.tempatTglLahir || ''}"></div>
-      <div class="input-group"><label>Wilayah / Pepanthan</label>
-        <select name="wilayah">
-          ${WILAYAH_LIST.map(w => `<option value="${w}" ${item?.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}
-        </select>
-      </div>
-      <div class="input-group"><label>Status Baptis / Sidi</label><input name="statusBaptisSidi" value="${item?.statusBaptisSidi || 'Baptis & Sidi'}"></div>
-      <div class="input-group"><label>No. WhatsApp / HP</label><input name="noHP" value="${item?.noHP || ''}"></div>
-      <div class="input-group"><label>Alamat Domisili</label><textarea name="alamat" rows="2">${item?.alamat || ''}</textarea></div>
-      <button type="submit" class="btn-primary"><i data-lucide="save" class="icon-sm"></i><span>Simpan Data Jemaat</span></button>
-    </form>
-  `);
-
-  document.getElementById('formJemaat').onsubmit = async (e) => {
-    e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.target));
-    fd.action = item ? 'updateJemaat' : 'addJemaat';
-    if (item) fd.noInduk = item.noInduk;
-    await apiPost(fd);
-    closeModal();
-    showToast('Data jemaat berhasil disimpan.');
-    renderJemaat();
-  };
-}
-
-async function deleteJemaat(noInduk) {
-  if (!confirm('Hapus data jemaat ' + noInduk + '?')) return;
-  await apiPost({ action: 'deleteJemaat', noInduk });
-  showToast('Data jemaat dihapus.');
-  renderJemaat();
-}
-
-// ================= 2. MODUL MANAJEMEN AKUN PENGGUNA =================
-async function renderUsers() {
-  document.getElementById('pageTitle').textContent = 'Manajemen Akun Pengguna';
-  document.getElementById('pageDesc').textContent = 'Kelola hak akses login Admin Sekretariat dan Warga Jemaat';
-
-  const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat daftar akun...</div>`;
-
-  const res = await apiGet('getUsers');
-  cache.users = res.data || [];
-
-  container.innerHTML = `
-    <div class="card">
-      <div class="toolbar">
-        <div class="search-box">
-          <i data-lucide="search" class="icon-sm"></i>
-          <input type="text" id="searchUser" class="search-input" placeholder="Cari username atau nama pengguna..." oninput="filterUsersTable()" />
-        </div>
-        <button class="btn-primary" onclick="openUserModal()">
-          <i data-lucide="plus" class="icon-sm"></i>
-          <span>Tambah Akun Baru</span>
+      <div class="card-header">
+        <h3>Daftar Warga Jemaat (${cache.jemaat.length} Jiwa)</h3>
+        <button type="button" class="btn-primary" onclick="openJemaatModal()">
+          <i data-lucide="user-plus" class="icon-sm"></i><span>Tambah Jemaat</span>
         </button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Username</th><th>Nama Lengkap</th><th>Role</th><th>Wilayah</th><th>No. Induk</th><th>Aksi</th></tr></thead>
-          <tbody id="usersTbody"></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  filterUsersTable();
-}
-
-function filterUsersTable() {
-  const q = (document.getElementById('searchUser')?.value || '').toLowerCase();
-  const list = cache.users.filter(u =>
-    String(u.username).toLowerCase().includes(q) || String(u.nama).toLowerCase().includes(q)
-  );
-  document.getElementById('usersTbody').innerHTML = list.map(u => `
-    <tr>
-      <td><strong>${u.username}</strong></td>
-      <td>${u.nama}</td>
-      <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
-      <td>${u.wilayah}</td>
-      <td>${u.noInduk}</td>
-      <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-sm btn-edit" onclick="openUserModal('${u.username}')"><i data-lucide="pencil" class="icon-xs"></i> Edit</button>
-          <button class="btn-sm btn-del" onclick="deleteUser('${u.username}')"><i data-lucide="trash-2" class="icon-xs"></i> Hapus</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-  renderIcons();
-}
-
-function openUserModal(username = null) {
-  const item = username ? cache.users.find(x => x.username === username) : null;
-  openModal(item ? 'Edit Akun Pengguna' : 'Tambah Akun Pengguna', `
-    <form id="formUser" class="form-stack">
-      <div class="input-group"><label>Username Login</label><input name="username" value="${item?.username || ''}" required></div>
-      <div class="input-group"><label>Kata Sandi</label><input name="password" value="${item?.password || ''}" required></div>
-      <div class="input-group"><label>Hak Akses (Role)</label>
-        <select name="role">
-          <option value="jemaat" ${item?.role === 'jemaat' ? 'selected' : ''}>Jemaat</option>
-          <option value="admin" ${item?.role === 'admin' ? 'selected' : ''}>Admin Sekretariat</option>
-        </select>
-      </div>
-      <div class="input-group"><label>Nama Lengkap</label><input name="nama" value="${item?.nama || ''}" required></div>
-      <div class="input-group"><label>Wilayah</label>
-        <select name="wilayah">
-          ${WILAYAH_LIST.map(w => `<option value="${w}" ${item?.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}
-        </select>
-      </div>
-      <div class="input-group"><label>No. Induk Jemaat / Admin</label><input name="noInduk" value="${item?.noInduk || 'JM-2026-'}"></div>
-      <button type="submit" class="btn-primary"><i data-lucide="save" class="icon-sm"></i><span>Simpan Akun</span></button>
-    </form>
-  `);
-
-  document.getElementById('formUser').onsubmit = async (e) => {
-    e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.target));
-    fd.action = item ? 'updateUser' : 'addUser';
-    if (item) fd.originalUsername = item.username;
-    const res = await apiPost(fd);
-    if (!res.success) return showToast(res.message);
-    closeModal();
-    showToast('Akun pengguna berhasil disimpan.');
-    renderUsers();
-  };
-}
-
-async function deleteUser(username) {
-  if (!confirm('Hapus akun "' + username + '"?')) return;
-  const res = await apiPost({ action: 'deleteUser', username });
-  if (!res.success) return showToast(res.message);
-  showToast('Akun dihapus.');
-  renderUsers();
-}
-
-// ================= 3. MODUL LAYANAN SURAT =================
-async function renderSurat() {
-  const isAdmin = currentUser.role === 'admin';
-  document.getElementById('pageTitle').textContent = isAdmin ? 'Layanan & Arsip Surat Gerejawi' : 'Pengajuan Surat Keterangan';
-  document.getElementById('pageDesc').textContent = isAdmin
-    ? 'Verifikasi permohonan surat warga dan unggah PDF arsip resmi ke Google Drive'
-    : 'Ajukan permohonan surat keterangan gerejawi secara daring';
-
-  const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat data layanan surat...</div>`;
-
-  const res = await apiGet('getSurat');
-  cache.surat = res.data || [];
-
-  if (isAdmin) {
-    container.innerHTML = `
-      <div class="card">
-        <div class="toolbar">
-          <div class="search-box">
-            <i data-lucide="search" class="icon-sm"></i>
-            <input type="text" id="searchSurat" class="search-input" placeholder="Cari nama pemohon, jenis surat, atau wilayah..." oninput="filterSuratAdmin()" />
-          </div>
-          <button class="btn-primary" onclick="openSuratAdminModal()">
-            <i data-lucide="plus" class="icon-sm"></i>
-            <span>Catat Surat Baru</span>
-          </button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID & Tgl</th><th>Pemohon & Wilayah</th><th>Jenis & Tujuan Surat</th>
-                <th>Berkas Jemaat</th><th>Arsip PDF Admin</th><th>Status</th><th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="suratAdminTbody"></tbody>
-          </table>
-        </div>
-      </div>
-    `;
-    filterSuratAdmin();
-  } else {
-    const myHistory = cache.surat.filter(s =>
-      String(s.pemohon).toLowerCase().includes(currentUser.nama.toLowerCase()) ||
-      String(s.noInduk) === String(currentUser.noInduk)
-    );
-
-    container.innerHTML = `
-      <div class="surat-layout">
-        <form id="formPengajuanJemaat">
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">1</span> Pilih Jenis Surat</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            ${JENIS_SURAT_LIST.map((j, i) => `
-              <label class="radio-option">
-                <div class="radio-left">
-                  <input type="radio" name="jenisSurat" value="${j.title}" ${i === 0 ? 'checked' : ''} required>
-                  <div>
-                    <div class="radio-title">${j.title}</div>
-                    <div class="radio-desc">${j.desc}</div>
-                  </div>
-                </div>
-              </label>
-            `).join('')}
-            <p class="helper-note">Pilih format permohonan sesuai kebutuhan administrasi Anda.</p>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">2</span> Nama Lengkap Pemohon</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            <div class="input-group">
-              <input type="text" name="pemohon" value="${currentUser.nama}" required />
-            </div>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">3</span> Bagian / Pepanthan Induk</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            ${WILAYAH_LIST.slice(0, 5).map(w => `
-              <label class="radio-option">
-                <div class="radio-left">
-                  <input type="radio" name="wilayah" value="${w}" ${currentUser.wilayah === w ? 'checked' : ''} required>
-                  <span class="radio-title">${w}</span>
-                </div>
-                <i data-lucide="church" class="icon-sm" style="color:var(--primary);"></i>
-              </label>
-            `).join('')}
-            <p class="helper-note">Pilih wilayah persekutuan jemaat tempat Anda terdaftar saat ini.</p>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">4</span> Tujuan Surat</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            <div class="input-group">
-              <input type="text" name="tujuanSurat" placeholder="Contoh: Majelis GKJ Salatiga / KUA / Dukcapil" required />
-            </div>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">5</span> Alamat Lengkap Instansi / Tujuan</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            <div class="input-group">
-              <textarea name="alamatTujuan" rows="2" placeholder="Jl. Diponegoro No. 52, Salatiga, Jawa Tengah" required></textarea>
-            </div>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">6</span> No. WhatsApp / HP Aktif</div>
-              <span class="tag-wajib">*Wajib</span>
-            </div>
-            <div class="input-group">
-              <input type="text" name="noWA" placeholder="+62 812-3456-7890" required />
-            </div>
-            <p class="helper-note">Sekretariat akan mengabarkan status surat via WhatsApp.</p>
-          </div>
-
-          <div class="step-card">
-            <div class="step-header">
-              <div class="step-title"><span class="step-num">7</span> Berkas Pendukung</div>
-              <span class="tag-opt">Opsional</span>
-            </div>
-            <label class="upload-dropzone" for="berkasInput">
-              <div class="upload-icon"><i data-lucide="upload-cloud" class="icon-md"></i></div>
-              <div style="font-weight:700;font-size:13.5px;" id="berkasLabelText">Ketuk untuk unggah berkas ke Google Drive</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px;">KTP, Kartu Keluarga, atau Akta Baptis (PDF, JPG, PNG maks. 3MB)</div>
-              <input type="file" id="berkasInput" accept=".pdf,.jpg,.jpeg,.png" class="hidden" onchange="updateBerkasLabel(this)" />
-            </label>
-          </div>
-
-          <p class="helper-note" style="margin-bottom:14px;">
-            <i data-lucide="shield-check" class="icon-sm" style="color:var(--accent);"></i>
-            <span>Data permohonan surat tersimpan aman dalam Sistem Kearsipan GKJ Salib Putih dan terhubung langsung ke Google Drive Sekretariat.</span>
-          </p>
-          <button type="submit" id="btnKirimSurat" class="btn-primary btn-full">
-            <span>Kirim Permohonan Surat</span>
-            <i data-lucide="send" class="icon-sm"></i>
-          </button>
-        </form>
-
-        <div class="card">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-            <i data-lucide="history" class="icon-sm" style="color:var(--primary);"></i>
-            <h3 style="font-size:15px;">Riwayat Pengajuan Terakhir</h3>
-          </div>
-          ${myHistory.length ? myHistory.map(h => `
-            <div class="history-item">
-              <div>
-                <div style="font-weight:700;font-size:13.5px;">${h.jenisSurat}</div>
-                <div style="font-size:12px;color:var(--muted);">Diajukan ${h.tanggal} • Tujuan: ${h.tujuanSurat}</div>
-                ${h.arsipSuratUrl ? `
-                  <a href="${h.arsipSuratUrl}" target="_blank" class="btn-sm btn-view" style="margin-top:6px;">
-                    <i data-lucide="download" class="icon-xs"></i> Unduh Surat Resmi PDF
-                  </a>` : ''}
-              </div>
-              <span class="badge ${h.status === 'Selesai' ? 'badge-selesai' : 'badge-proses'}">
-                <i data-lucide="${h.status === 'Selesai' ? 'check-circle-2' : 'clock'}" class="icon-xs"></i>
-                ${h.status}
-              </span>
-            </div>
-          `).join('') : '<p style="font-size:13px;color:var(--muted);">Belum ada riwayat pengajuan surat.</p>'}
-        </div>
-      </div>
-    `;
-
-    renderIcons();
-    document.getElementById('formPengajuanJemaat').onsubmit = submitSuratJemaat;
-  }
-}
-
-function updateBerkasLabel(input) {
-  if (input.files && input.files[0]) {
-    document.getElementById('berkasLabelText').textContent = 'File terpilih: ' + input.files[0].name;
-  }
-}
-
-async function submitSuratJemaat(e) {
-  e.preventDefault();
-  const btn = document.getElementById('btnKirimSurat');
-  btn.innerHTML = `<span>Mengunggah & Mengirim...</span>`;
-  btn.disabled = true;
-
-  try {
-    const fd = Object.fromEntries(new FormData(e.target));
-    fd.action = 'addSurat';
-    fd.noInduk = currentUser.noInduk;
-
-    const fileInput = document.getElementById('berkasInput');
-    if (fileInput.files && fileInput.files[0]) {
-      const f = fileInput.files[0];
-      if (f.size > 3 * 1024 * 1024) throw new Error('Ukuran file maksimal 3MB.');
-      fd.berkasBase64 = await fileToBase64(f);
-      fd.berkasName = f.name;
-      fd.berkasMime = f.type;
-    }
-
-    await apiPost(fd);
-    showToast('Permohonan surat & berkas berhasil dikirim.');
-    renderSurat();
-  } catch (err) {
-    showToast(err.message || 'Gagal mengirim permohonan.');
-  } finally {
-    btn.innerHTML = `<span>Kirim Permohonan Surat</span><i data-lucide="send" class="icon-sm"></i>`;
-    btn.disabled = false;
-    renderIcons();
-  }
-}
-
-function filterSuratAdmin() {
-  const q = (document.getElementById('searchSurat')?.value || '').toLowerCase();
-  const list = cache.surat.filter(s =>
-    String(s.pemohon).toLowerCase().includes(q) ||
-    String(s.jenisSurat).toLowerCase().includes(q) ||
-    String(s.wilayah).toLowerCase().includes(q)
-  );
-
-  document.getElementById('suratAdminTbody').innerHTML = list.map(s => `
-    <tr>
-      <td><strong>${s.idSurat}</strong><br><small>${s.tanggal}</small></td>
-      <td><strong>${s.pemohon}</strong><br><small>${s.wilayah} (${s.noWA})</small></td>
-      <td>${s.jenisSurat}<br><small>Tujuan: ${s.tujuanSurat}</small></td>
-      <td>${s.berkasPendukungUrl ? `<a href="${s.berkasPendukungUrl}" target="_blank" class="btn-sm btn-view"><i data-lucide="paperclip" class="icon-xs"></i> Berkas</a>` : '-'}</td>
-      <td>${s.arsipSuratUrl ? `<a href="${s.arsipSuratUrl}" target="_blank" class="btn-sm btn-view"><i data-lucide="file-check" class="icon-xs"></i> Arsip PDF</a>` : '<small style="color:#94a3b8;">Belum diunggah</small>'}</td>
-      <td><span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : 'badge-proses'}">${s.status}</span></td>
-      <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-sm btn-edit" onclick="openSuratAdminModal('${s.idSurat}')"><i data-lucide="upload" class="icon-xs"></i> Proses / PDF</button>
-          <button class="btn-sm btn-del" onclick="deleteSurat('${s.idSurat}')"><i data-lucide="trash-2" class="icon-xs"></i> Hapus</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-  renderIcons();
-}
-
-function openSuratAdminModal(idSurat = null) {
-  const item = idSurat ? cache.surat.find(x => x.idSurat === idSurat) : null;
-  openModal(item ? `Kelola Surat ${item.idSurat}` : 'Catat Pengajuan Surat Baru', `
-    <form id="formSuratAdmin" class="form-stack">
-      <div class="input-group"><label>Nama Pemohon</label><input name="pemohon" value="${item?.pemohon || ''}" required></div>
-      <div class="input-group"><label>Wilayah / Pepanthan</label>
-        <select name="wilayah">
-          ${WILAYAH_LIST.map(w => `<option value="${w}" ${item?.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}
-        </select>
-      </div>
-      <div class="input-group"><label>Jenis Surat</label>
-        <select name="jenisSurat">
-          ${JENIS_SURAT_LIST.map(j => `<option value="${j.title}" ${item?.jenisSurat === j.title ? 'selected' : ''}>${j.title}</option>`).join('')}
-        </select>
-      </div>
-      <div class="input-group"><label>Tujuan Surat</label><input name="tujuanSurat" value="${item?.tujuanSurat || ''}" required></div>
-      <div class="input-group"><label>Alamat Instansi / Tujuan</label><input name="alamatTujuan" value="${item?.alamatTujuan || ''}"></div>
-      <div class="input-group"><label>No. WhatsApp</label><input name="noWA" value="${item?.noWA || ''}"></div>
-      <div class="input-group"><label>Status Layanan</label>
-        <select name="status">
-          <option value="Proses" ${item?.status === 'Proses' ? 'selected' : ''}>Proses</option>
-          <option value="Selesai" ${item?.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
-        </select>
-      </div>
-      ${item ? `
-        <div class="input-group">
-          <label>Upload Arsip PDF Surat Resmi ke Google Drive (Opsional)</label>
-          <input type="file" id="arsipPdfInput" accept="application/pdf" />
-        </div>
-      ` : ''}
-      <button type="submit" id="btnSaveSuratAdmin" class="btn-primary">
-        <i data-lucide="save" class="icon-sm"></i>
-        <span>Simpan & Sinkron ke Google Drive</span>
-      </button>
-    </form>
-  `);
-
-  document.getElementById('formSuratAdmin').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btnSaveSuratAdmin');
-    btn.textContent = 'Menyimpan...';
-    btn.disabled = true;
-
-    const fd = Object.fromEntries(new FormData(e.target));
-    fd.action = item ? 'updateSurat' : 'addSurat';
-    if (item) {
-      fd.idSurat = item.idSurat;
-      const pdfFile = document.getElementById('arsipPdfInput')?.files[0];
-      if (pdfFile) {
-        fd.arsipBase64 = await fileToBase64(pdfFile);
-        fd.arsipFileName = pdfFile.name;
-      }
-    }
-    await apiPost(fd);
-    closeModal();
-    showToast('Data surat & arsip berhasil diperbarui.');
-    renderSurat();
-  };
-}
-
-async function deleteSurat(idSurat) {
-  if (!confirm('Hapus data surat ' + idSurat + '?')) return;
-  await apiPost({ action: 'deleteSurat', idSurat });
-  showToast('Data surat dihapus.');
-  renderSurat();
-}
-
-// ================= 4. MODUL KEUANGAN =================
-async function renderKeuangan() {
-  const isAdmin = currentUser.role === 'admin';
-  document.getElementById('pageTitle').textContent = isAdmin ? 'Manajemen Kas & Keuangan' : 'Laporan Keuangan Jemaat';
-  document.getElementById('pageDesc').textContent = 'Rekapitulasi pemasukan, persembahan, dan pengeluaran pelayanan GKJ Salib Putih';
-
-  const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat buku kas...</div>`;
-
-  const res = await apiGet('getKeuangan');
-  cache.keuangan = res.data || [];
-
-  const masuk = cache.keuangan.filter(k => k.jenis === 'Pemasukan').reduce((a, b) => a + b.nominal, 0);
-  const keluar = cache.keuangan.filter(k => k.jenis === 'Pengeluaran').reduce((a, b) => a + b.nominal, 0);
-  const saldo = masuk - keluar;
-
-  container.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="arrow-down-left" class="icon-xs" style="color:#15803d;"></i> Total Pemasukan</div>
-        <div class="stat-val" style="color:#15803d;">Rp ${masuk.toLocaleString('id-ID')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="arrow-up-right" class="icon-xs" style="color:#b91c1c;"></i> Total Pengeluaran</div>
-        <div class="stat-val" style="color:#b91c1c;">Rp ${keluar.toLocaleString('id-ID')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><i data-lucide="landmark" class="icon-xs" style="color:#1e3a8a;"></i> Saldo Kas Tercatat</div>
-        <div class="stat-val" style="color:#1e3a8a;">Rp ${saldo.toLocaleString('id-ID')}</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="toolbar">
-        <div class="search-box">
-          <i data-lucide="search" class="icon-sm"></i>
-          <input type="text" id="searchKeu" class="search-input" placeholder="Cari uraian atau bidang pos..." oninput="filterKeuTable()" />
-        </div>
-        ${isAdmin ? `
-          <button class="btn-primary" onclick="openKeuModal()">
-            <i data-lucide="plus" class="icon-sm"></i>
-            <span>Catat Transaksi</span>
-          </button>` : ''}
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Tanggal</th><th>Uraian Transaksi</th><th>Bidang / Pos</th><th>Jenis</th><th>Nominal</th>
-              ${isAdmin ? '<th>Aksi</th>' : ''}
+              <th>No. Induk</th><th>Nama Lengkap</th><th>L/P</th><th>Wilayah</th><th>Baptis / Sidi</th><th>No. HP</th><th>Aksi</th>
             </tr>
           </thead>
-          <tbody id="keuTbody"></tbody>
+          <tbody>
+            ${cache.jemaat.map(j => `
+              <tr>
+                <td><strong>${j.noInduk}</strong><br><small style="color:var(--muted)">${j.noKK || ''}</small></td>
+                <td><strong>${j.nama}</strong><br><small style="color:var(--muted)">${j.alamat || ''}</small></td>
+                <td>${j.jenisKelamin}</td>
+                <td>${j.wilayah}</td>
+                <td>${j.statusBaptisSidi}</td>
+                <td>${j.noHP || '-'}</td>
+                <td style="white-space:nowrap;">
+                  <button type="button" class="btn-outline btn-sm" onclick="openJemaatModal('${j.noInduk}')">Edit</button>
+                  <button type="button" class="btn-danger" onclick="hapusJemaat('${j.noInduk}')">Hapus</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
         </table>
       </div>
     </div>
   `;
-  filterKeuTable();
 }
 
-function filterKeuTable() {
-  const isAdmin = currentUser.role === 'admin';
-  const q = (document.getElementById('searchKeu')?.value || '').toLowerCase();
-  const list = cache.keuangan.filter(k =>
-    String(k.uraian).toLowerCase().includes(q) || String(k.bidangPos).toLowerCase().includes(q)
-  );
-
-  document.getElementById('keuTbody').innerHTML = list.map(k => `
-    <tr>
-      <td>${k.tanggal}</td>
-      <td><strong>${k.uraian}</strong><br><small style="color:#64748b;">${k.sumberWarta}</small></td>
-      <td>${k.bidangPos}</td>
-      <td><span class="badge ${k.jenis === 'Pemasukan' ? 'badge-selesai' : 'badge-proses'}">${k.jenis}</span></td>
-      <td><strong>Rp ${Number(k.nominal).toLocaleString('id-ID')}</strong></td>
-      ${isAdmin ? `
-        <td>
-          <div style="display:flex;gap:6px;">
-            <button class="btn-sm btn-edit" onclick="openKeuModal('${k.idTransaksi}')"><i data-lucide="pencil" class="icon-xs"></i> Edit</button>
-            <button class="btn-sm btn-del" onclick="deleteKeu('${k.idTransaksi}')"><i data-lucide="trash-2" class="icon-xs"></i> Hapus</button>
-          </div>
-        </td>` : ''}
-    </tr>
-  `).join('');
-  renderIcons();
-}
-
-function openKeuModal(idTransaksi = null) {
-  const item = idTransaksi ? cache.keuangan.find(x => x.idTransaksi === idTransaksi) : null;
-  openModal(item ? 'Edit Transaksi Keuangan' : 'Catat Transaksi Keuangan Baru', `
-    <form id="formKeu" class="form-stack">
-      <div class="input-group"><label>Tanggal</label><input name="tanggal" value="${item?.tanggal || '16 Nov 2026'}" required></div>
-      <div class="input-group"><label>Uraian Transaksi</label><input name="uraian" value="${item?.uraian || ''}" required></div>
-      <div class="input-group"><label>Bidang / Pos Anggaran</label><input name="bidangPos" value="${item?.bidangPos || 'Persembahan Rutin'}" required></div>
-      <div class="input-group"><label>Jenis Transaksi</label>
-        <select name="jenis">
-          <option value="Pemasukan" ${item?.jenis === 'Pemasukan' ? 'selected' : ''}>Pemasukan</option>
-          <option value="Pengeluaran" ${item?.jenis === 'Pengeluaran' ? 'selected' : ''}>Pengeluaran</option>
+function openJemaatModal(noInduk = null) {
+  const j = noInduk ? cache.jemaat.find(x => x.noInduk === noInduk) : {};
+  openModal(noInduk ? 'Edit Data Jemaat' : 'Tambah Data Jemaat Baru', `
+    <form onsubmit="submitJemaat(event, '${noInduk || ''}')">
+      <div class="input-group"><label>Nomor KK Gereja</label><input id="jmKK" value="${j.noKK || 'KK-GKJSP-'}" required></div>
+      <div class="input-group"><label>Nama Lengkap</label><input id="jmNama" value="${j.nama || ''}" required></div>
+      <div class="input-group"><label>Jenis Kelamin</label>
+        <select id="jmJK">
+          <option value="L" ${j.jenisKelamin === 'L' ? 'selected' : ''}>Laki-laki (L)</option>
+          <option value="P" ${j.jenisKelamin === 'P' ? 'selected' : ''}>Perempuan (P)</option>
         </select>
       </div>
-      <div class="input-group"><label>Nominal (Rp)</label><input type="number" name="nominal" value="${item?.nominal || ''}" required></div>
-      <div class="input-group"><label>Keterangan / Nomor Warta</label><input name="sumberWarta" value="${item?.sumberWarta || 'Input Sekretariat'}"></div>
-      <button type="submit" class="btn-primary"><i data-lucide="save" class="icon-sm"></i><span>Simpan Transaksi</span></button>
+      <div class="input-group"><label>Tempat, Tanggal Lahir</label><input id="jmTTL" value="${j.tempatTglLahir || ''}" placeholder="Salatiga, 12 Mei 1985"></div>
+      <div class="input-group"><label>Wilayah / Pepanthan</label>
+        <select id="jmWilayah">${WILAYAH_LIST.map(w => `<option value="${w}" ${j.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
+      </div>
+      <div class="input-group"><label>Status Sakramen</label>
+        <select id="jmBaptis">
+          <option value="Baptis & Sidi" ${j.statusBaptisSidi === 'Baptis & Sidi' ? 'selected' : ''}>Baptis & Sidi</option>
+          <option value="Baptis Anak" ${j.statusBaptisSidi === 'Baptis Anak' ? 'selected' : ''}>Baptis Anak</option>
+          <option value="Simpatisan" ${j.statusBaptisSidi === 'Simpatisan' ? 'selected' : ''}>Simpatisan</option>
+        </select>
+      </div>
+      <div class="input-group"><label>No. HP / WhatsApp</label><input id="jmHP" value="${j.noHP || ''}"></div>
+      <div class="input-group"><label>Alamat Lengkap</label><textarea id="jmAlamat" rows="2">${j.alamat || ''}</textarea></div>
+      <button type="submit" class="btn-primary btn-full">Simpan Data Jemaat</button>
     </form>
   `);
+}
 
-  document.getElementById('formKeu').onsubmit = async (e) => {
-    e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.target));
-    fd.action = item ? 'updateKeuangan' : 'addKeuangan';
-    if (item) fd.idTransaksi = item.idTransaksi;
-    await apiPost(fd);
-    closeModal();
-    showToast('Transaksi keuangan disimpan.');
-    renderKeuangan();
+async function submitJemaat(e, noInduk) {
+  e.preventDefault();
+  const payload = {
+    action: noInduk ? 'updateJemaat' : 'addJemaat',
+    noInduk,
+    noKK: document.getElementById('jmKK').value,
+    nama: document.getElementById('jmNama').value,
+    jenisKelamin: document.getElementById('jmJK').value,
+    tempatTglLahir: document.getElementById('jmTTL').value,
+    wilayah: document.getElementById('jmWilayah').value,
+    statusBaptisSidi: document.getElementById('jmBaptis').value,
+    statusKeanggotaan: 'Aktif',
+    noHP: document.getElementById('jmHP').value,
+    alamat: document.getElementById('jmAlamat').value
   };
+  const res = await apiPost(payload);
+  if (res.success) {
+    closeModal();
+    showToast('Data jemaat berhasil disimpan.');
+    refreshCurrentTab();
+  } else showToast(res.message || 'Gagal menyimpan.', true);
 }
 
-async function deleteKeu(idTransaksi) {
-  if (!confirm('Hapus transaksi ' + idTransaksi + '?')) return;
-  await apiPost({ action: 'deleteKeuangan', idTransaksi });
-  showToast('Transaksi dihapus.');
-  renderKeuangan();
+async function hapusJemaat(noInduk) {
+  if (!confirm('Hapus data jemaat ' + noInduk + '?')) return;
+  const res = await apiPost({ action: 'deleteJemaat', noInduk });
+  if (res.success) { showToast('Data jemaat dihapus.'); refreshCurrentTab(); }
 }
 
-// ================= 5. MODUL WARTA JEMAAT =================
-async function renderWarta() {
+// ================= 3. LAYANAN SURAT =================
+async function renderSurat(container) {
+  const res = await apiGet('getSurat');
+  const all = res.data || [];
   const isAdmin = currentUser.role === 'admin';
-  document.getElementById('pageTitle').textContent = isAdmin ? 'Manajemen Warta Jemaat' : 'Warta Jemaat & Tata Ibadah';
-  document.getElementById('pageDesc').textContent = 'Arsip digital Warta Jemaat GKJ Salib Putih langsung dari Google Drive';
-
-  const container = document.getElementById('contentContainer');
-  container.innerHTML = `<div class="card">Memuat arsip Warta Jemaat...</div>`;
-
-  const res = await apiGet('getWarta');
-  cache.warta = res.data || [];
+  cache.surat = isAdmin ? all : all.filter(s => s.pemohon === currentUser.nama || s.noInduk === currentUser.noInduk);
 
   container.innerHTML = `
-    <div class="toolbar">
-      <div class="search-box">
-        <i data-lucide="search" class="icon-sm"></i>
-        <input type="text" id="searchWarta" class="search-input" placeholder="Cari edisi warta, bulan, atau tanggal..." oninput="filterWartaGrid()" />
+    <div class="card">
+      <div class="card-header">
+        <h3>${isAdmin ? 'Daftar Permohonan Surat Jemaat' : 'Riwayat Pengajuan Surat Saya'}</h3>
+        <button type="button" class="btn-primary" onclick="openSuratModal()">
+          <i data-lucide="file-plus" class="icon-sm"></i><span>Ajukan Surat Baru</span>
+        </button>
       </div>
-      ${isAdmin ? `
-        <button class="btn-primary" onclick="openUploadWartaModal()">
-          <i data-lucide="file-up" class="icon-sm"></i>
-          <span>Unggah Warta PDF</span>
-        </button>` : ''}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID & Tgl</th><th>Pemohon</th><th>Jenis Surat</th><th>Tujuan</th><th>Berkas</th><th>Status</th><th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cache.surat.map(s => `
+              <tr>
+                <td><strong>${s.idSurat}</strong><br><small style="color:var(--muted)">${s.tanggal}</small></td>
+                <td><strong>${s.pemohon}</strong><br><small style="color:var(--muted)">${s.wilayah}</small></td>
+                <td>${s.jenisSurat}</td>
+                <td>${s.tujuanSurat}</td>
+                <td>
+                  ${s.berkasPendukungUrl ? `<a href="${s.berkasPendukungUrl}" target="_blank" class="link-more">Berkas Pemohon</a><br>` : ''}
+                  ${s.arsipSuratUrl ? `<a href="${s.arsipSuratUrl}" target="_blank" class="link-more" style="color:var(--success)">Surat Resmi PDF</a>` : '-'}
+                </td>
+                <td><span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span></td>
+                <td style="white-space:nowrap;">
+                  ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openSuratAdminModal('${s.idSurat}')">Proses</button>` : ''}
+                  ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusSurat('${s.idSurat}')">Hapus</button>` : '-'}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="7">Belum ada data surat.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
     </div>
-    <div id="wartaGrid" class="warta-grid"></div>
   `;
-  filterWartaGrid();
 }
 
-function filterWartaGrid() {
-  const isAdmin = currentUser.role === 'admin';
-  const q = (document.getElementById('searchWarta')?.value || '').toLowerCase();
-  const list = cache.warta.filter(w =>
-    String(w.namaFile).toLowerCase().includes(q) ||
-    String(w.bulan).toLowerCase().includes(q) ||
-    String(w.updatedAt).toLowerCase().includes(q)
-  );
+function openSuratModal() {
+  openModal('Form Pengajuan Surat Gerejawi', `
+    <form onsubmit="submitSuratBaru(event)">
+      <div class="input-group"><label>Nama Pemohon</label><input id="srPemohon" value="${currentUser.nama}" required></div>
+      <div class="input-group"><label>Nomor Induk Jemaat</label><input id="srNoInduk" value="${currentUser.noInduk || ''}"></div>
+      <div class="input-group"><label>Wilayah / Pepanthan</label>
+        <select id="srWilayah">${WILAYAH_LIST.map(w => `<option value="${w}" ${currentUser.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
+      </div>
+      <div class="input-group"><label>Jenis Surat</label>
+        <select id="srJenis">${JENIS_SURAT_LIST.map(j => `<option value="${j}">${j}</option>`).join('')}</select>
+      </div>
+      <div class="input-group"><label>Instansi / Gereja Tujuan</label><input id="srTujuan" placeholder="Contoh: Majelis GKJ Salatiga / KUA" required></div>
+      <div class="input-group"><label>Alamat Tujuan</label><input id="srAlamat" placeholder="Alamat instansi tujuan"></div>
+      <div class="input-group"><label>No. WhatsApp Aktif</label><input id="srWA" placeholder="0812..." required></div>
+      <div class="input-group"><label>Lampiran Berkas Pendukung (PDF/Foto, Opsional)</label><input type="file" id="srFile" accept=".pdf,image/*"></div>
+      <button type="submit" id="btnSubmitSurat" class="btn-primary btn-full">Kirim Permohonan Surat</button>
+    </form>
+  `);
+}
 
-  const grid = document.getElementById('wartaGrid');
-  if (!list.length) {
-    grid.innerHTML = `<div class="card">Tidak ada edisi warta yang cocok dengan pencarian.</div>`;
-    renderIcons();
-    return;
+async function submitSuratBaru(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnSubmitSurat');
+  btn.disabled = true; btn.textContent = 'Mengunggah & mengirim...';
+
+  const fileInput = document.getElementById('srFile');
+  let berkasBase64 = '', berkasName = '', berkasMime = '';
+  if (fileInput.files && fileInput.files[0]) {
+    const f = fileInput.files[0];
+    berkasBase64 = await fileToBase64(f);
+    berkasName = f.name;
+    berkasMime = f.type;
   }
 
-  grid.innerHTML = list.map((w, index) => `
-    <div class="warta-card">
-      <div class="warta-cover">
-        ${index === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
-        <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
-      </div>
-      <div class="warta-body">
-        <div class="warta-title">${w.namaFile}</div>
-        <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
-        <div class="warta-actions">
-          <button class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
-            <i data-lucide="book-open" class="icon-sm"></i>
-            <span>Buka</span>
-          </button>
-          <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh PDF" aria-label="Unduh PDF">
-            <i data-lucide="download" class="icon-sm"></i>
-          </a>
-        </div>
-        ${isAdmin ? `
-          <div style="display:flex;gap:6px;margin-top:8px;">
-            <button class="btn-sm btn-edit" style="flex:1;" onclick="renameWarta('${w.id}', '${w.namaFile}')">
-              <i data-lucide="pencil" class="icon-xs"></i> Ubah Nama
-            </button>
-            <button class="btn-sm btn-del" onclick="deleteWarta('${w.id}', '${w.namaFile}')">
-              <i data-lucide="trash-2" class="icon-xs"></i> Hapus
-            </button>
-          </div>` : ''}
-      </div>
-    </div>
-  `).join('');
-  renderIcons();
+  const res = await apiPost({
+    action: 'addSurat',
+    pemohon: document.getElementById('srPemohon').value,
+    noInduk: document.getElementById('srNoInduk').value,
+    wilayah: document.getElementById('srWilayah').value,
+    jenisSurat: document.getElementById('srJenis').value,
+    tujuanSurat: document.getElementById('srTujuan').value,
+    alamatTujuan: document.getElementById('srAlamat').value,
+    noWA: document.getElementById('srWA').value,
+    berkasBase64, berkasName, berkasMime,
+    status: 'Proses'
+  });
+
+  if (res.success) {
+    closeModal();
+    showToast('Permohonan surat berhasil dikirim.');
+    refreshCurrentTab();
+  } else {
+    btn.disabled = false; btn.textContent = 'Kirim Permohonan Surat';
+    showToast(res.message || 'Gagal mengirim.', true);
+  }
 }
 
-function previewPdf(url, title) {
-  openModal(title, `<iframe src="${url}" style="width:100%;height:72vh;border:none;border-radius:10px;"></iframe>`);
+function openSuratAdminModal(idSurat) {
+  const s = cache.surat.find(x => x.idSurat === idSurat);
+  openModal('Proses & Arsipkan Surat ' + idSurat, `
+    <form onsubmit="submitUpdateSurat(event, '${idSurat}')">
+      <div class="input-group"><label>Pemohon</label><input value="${s.pemohon} (${s.jenisSurat})" disabled></div>
+      <div class="input-group"><label>Status Permohonan</label>
+        <select id="admSrStatus">
+          <option value="Proses" ${s.status === 'Proses' ? 'selected' : ''}>Proses</option>
+          <option value="Selesai" ${s.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
+          <option value="Ditolak" ${s.status === 'Ditolak' ? 'selected' : ''}>Ditolak</option>
+        </select>
+      </div>
+      <div class="input-group"><label>Unggah PDF Surat Resmi (Opsional)</label><input type="file" id="admSrPdf" accept=".pdf"></div>
+      <button type="submit" id="btnUpdSurat" class="btn-primary btn-full">Simpan Perubahan Status</button>
+    </form>
+  `);
+}
+
+async function submitUpdateSurat(e, idSurat) {
+  e.preventDefault();
+  const btn = document.getElementById('btnUpdSurat');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+
+  const fileInput = document.getElementById('admSrPdf');
+  let arsipBase64 = '', arsipFileName = '';
+  if (fileInput.files && fileInput.files[0]) {
+    arsipBase64 = await fileToBase64(fileInput.files[0]);
+    arsipFileName = fileInput.files[0].name;
+  }
+
+  const res = await apiPost({
+    action: 'updateSurat',
+    idSurat,
+    status: document.getElementById('admSrStatus').value,
+    arsipBase64,
+    arsipFileName
+  });
+
+  if (res.success) {
+    closeModal();
+    showToast('Status surat diperbarui.');
+    refreshCurrentTab();
+  }
+}
+
+async function hapusSurat(idSurat) {
+  if (!confirm('Hapus permohonan surat ' + idSurat + '?')) return;
+  const res = await apiPost({ action: 'deleteSurat', idSurat });
+  if (res.success) { showToast('Surat dihapus.'); refreshCurrentTab(); }
+}
+
+// ================= 4. KEUANGAN GEREJA =================
+async function renderKeuangan(container) {
+  const res = await apiGet('getKeuangan');
+  cache.keuangan = res.data || [];
+  const isAdmin = currentUser.role === 'admin';
+
+  const totalIn = cache.keuangan.filter(k => k.jenis === 'Pemasukan').reduce((a, b) => a + Number(b.nominal), 0);
+  const totalOut = cache.keuangan.filter(k => k.jenis === 'Pengeluaran').reduce((a, b) => a + Number(b.nominal), 0);
+
+  container.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-icon kpi-emerald"><i data-lucide="arrow-down-left" class="icon-md"></i></div><div><div class="kpi-label">Total Pemasukan</div><div class="kpi-value">${formatRupiah(totalIn)}</div></div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-rose"><i data-lucide="arrow-up-right" class="icon-md"></i></div><div><div class="kpi-label">Total Pengeluaran</div><div class="kpi-value">${formatRupiah(totalOut)}</div></div></div>
+      <div class="kpi-card"><div class="kpi-icon kpi-blue"><i data-lucide="wallet" class="icon-md"></i></div><div><div class="kpi-label">Saldo Akhir Kas</div><div class="kpi-value">${formatRupiah(totalIn - totalOut)}</div></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Buku Kas & Laporan Keuangan</h3>
+        ${isAdmin ? `<button type="button" class="btn-primary" onclick="openKeuanganModal()"><i data-lucide="plus" class="icon-sm"></i><span>Catat Transaksi</span></button>` : ''}
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Tanggal</th><th>Uraian Transaksi</th><th>Bidang / Pos</th><th>Jenis</th><th>Nominal</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr>
+          </thead>
+          <tbody>
+            ${cache.keuangan.map(k => `
+              <tr>
+                <td>${k.tanggal}</td>
+                <td><strong>${k.uraian}</strong><br><small style="color:var(--muted)">Ref: ${k.sumberWarta || '-'}</small></td>
+                <td>${k.bidangPos}</td>
+                <td><span class="badge ${k.jenis === 'Pemasukan' ? 'badge-in' : 'badge-out'}">${k.jenis}</span></td>
+                <td><strong>${formatRupiah(k.nominal)}</strong></td>
+                ${isAdmin ? `<td><button type="button" class="btn-danger" onclick="hapusKeuangan('${k.idTransaksi}')">Hapus</button></td>` : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function openKeuanganModal() {
+  openModal('Catat Transaksi Keuangan Baru', `
+    <form onsubmit="submitKeuangan(event)">
+      <div class="input-group"><label>Tanggal</label><input id="keuTgl" value="16 Nov 2026" required></div>
+      <div class="input-group"><label>Uraian Transaksi</label><input id="keuUraian" placeholder="Contoh: Persembahan Ibadah Minggu" required></div>
+      <div class="input-group"><label>Bidang / Pos Anggaran</label><input id="keuPos" value="Persembahan Rutin" required></div>
+      <div class="input-group"><label>Jenis Transaksi</label>
+        <select id="keuJenis"><option value="Pemasukan">Pemasukan</option><option value="Pengeluaran">Pengeluaran</option></select>
+      </div>
+      <div class="input-group"><label>Nominal (Rupiah)</label><input type="number" id="keuNom" placeholder="500000" required></div>
+      <div class="input-group"><label>Sumber / Nomor Warta</label><input id="keuRef" value="WG-46-GKJSP-XI-2026"></div>
+      <button type="submit" class="btn-primary btn-full">Simpan Transaksi</button>
+    </form>
+  `);
+}
+
+async function submitKeuangan(e) {
+  e.preventDefault();
+  const res = await apiPost({
+    action: 'addKeuangan',
+    tanggal: document.getElementById('keuTgl').value,
+    uraian: document.getElementById('keuUraian').value,
+    bidangPos: document.getElementById('keuPos').value,
+    jenis: document.getElementById('keuJenis').value,
+    nominal: document.getElementById('keuNom').value,
+    sumberWarta: document.getElementById('keuRef').value
+  });
+  if (res.success) { closeModal(); showToast('Transaksi keuangan dicatat.'); refreshCurrentTab(); }
+}
+
+async function hapusKeuangan(idTransaksi) {
+  if (!confirm('Hapus catatan transaksi ' + idTransaksi + '?')) return;
+  const res = await apiPost({ action: 'deleteKeuangan', idTransaksi });
+  if (res.success) { showToast('Transaksi dihapus.'); refreshCurrentTab(); }
+}
+
+// ================= 5. WARTA JEMAAT =================
+async function renderWarta(container) {
+  const res = await apiGet('getWarta');
+  cache.warta = res.data || [];
+  const isAdmin = currentUser.role === 'admin';
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>Arsip Warta Jemaat (${cache.warta.length} Dokumen PDF)</h3>
+        ${isAdmin ? `<button type="button" class="btn-primary" onclick="openUploadWartaModal()"><i data-lucide="upload" class="icon-sm"></i><span>Unggah Warta PDF</span></button>` : ''}
+      </div>
+      <div class="warta-grid">
+        ${cache.warta.map((w, idx) => `
+          <div class="warta-card">
+            <div class="warta-cover">
+              ${idx === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
+              <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
+            </div>
+            <div class="warta-body">
+              <div class="warta-title">${w.namaFile}</div>
+              <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
+              <div class="warta-actions">
+                <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
+                  <i data-lucide="book-open" class="icon-sm"></i><span>Baca</span>
+                </button>
+                <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh"><i data-lucide="download" class="icon-sm"></i></a>
+                ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusWarta('${w.id}')">Hapus</button>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('') || '<p>Belum ada Warta Jemaat di folder Google Drive.</p>'}
+      </div>
+    </div>
+  `;
 }
 
 function openUploadWartaModal() {
   openModal('Unggah Warta Jemaat Baru (PDF)', `
-    <form id="formUploadWarta" class="form-stack">
-      <div class="input-group"><label>Nama Folder Bulan (di Google Drive)</label><input name="bulan" value="November 2026" required></div>
-      <div class="input-group"><label>Judul / Nomor Warta</label><input name="namaFile" placeholder="Contoh: Warta Jemaat WG-46 GKJSP" required></div>
-      <div class="input-group"><label>Pilih File PDF Warta</label><input type="file" id="wartaPdfFile" accept="application/pdf" required></div>
-      <button type="submit" id="btnUploadWarta" class="btn-primary">
-        <i data-lucide="upload-cloud" class="icon-sm"></i>
-        <span>Unggah ke Google Drive</span>
-      </button>
+    <form onsubmit="submitUploadWarta(event)">
+      <div class="input-group"><label>Nama Edisi Warta</label><input id="wrNama" placeholder="Contoh: Warta Jemaat Minggu 22 Nov 2026" required></div>
+      <div class="input-group"><label>Folder Bulan</label><input id="wrBulan" value="November 2026" required></div>
+      <div class="input-group"><label>Pilih File PDF</label><input type="file" id="wrFile" accept=".pdf" required></div>
+      <button type="submit" id="btnUpWarta" class="btn-primary btn-full">Unggah ke Google Drive</button>
     </form>
   `);
-
-  document.getElementById('formUploadWarta').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btnUploadWarta');
-    btn.textContent = 'Mengunggah PDF...';
-    btn.disabled = true;
-
-    const fd = Object.fromEntries(new FormData(e.target));
-    const file = document.getElementById('wartaPdfFile').files[0];
-    fd.action = 'uploadWarta';
-    fd.fileBase64 = await fileToBase64(file);
-
-    await apiPost(fd);
-    closeModal();
-    showToast('Warta Jemaat berhasil diunggah ke Google Drive.');
-    renderWarta();
-  };
 }
 
-async function renameWarta(fileId, oldName) {
-  const namaFile = prompt('Masukkan judul baru untuk Warta Jemaat:', oldName);
-  if (!namaFile || namaFile === oldName) return;
-  await apiPost({ action: 'updateWarta', fileId, namaFile });
-  showToast('Judul warta diperbarui.');
-  renderWarta();
+async function submitUploadWarta(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnUpWarta');
+  btn.disabled = true; btn.textContent = 'Mengunggah ke Drive...';
+
+  const file = document.getElementById('wrFile').files[0];
+  const fileBase64 = await fileToBase64(file);
+  const res = await apiPost({
+    action: 'uploadWarta',
+    namaFile: document.getElementById('wrNama').value,
+    bulan: document.getElementById('wrBulan').value,
+    fileBase64
+  });
+  if (res.success) { closeModal(); showToast('Warta Jemaat berhasil diunggah.'); refreshCurrentTab(); }
 }
 
-async function deleteWarta(fileId, name) {
-  if (!confirm('Pindahkan "' + name + '" ke sampah Google Drive?')) return;
-  await apiPost({ action: 'deleteWarta', fileId });
-  showToast('Warta berhasil dihapus.');
-  renderWarta();
+async function hapusWarta(fileId) {
+  if (!confirm('Hapus file Warta ini dari Google Drive?')) return;
+  const res = await apiPost({ action: 'deleteWarta', fileId });
+  if (res.success) { showToast('Warta dihapus.'); refreshCurrentTab(); }
 }
 
-// ================= MODAL & TOAST UTILS =================
+// ================= 6. MANAJEMEN AKUN USERS =================
+async function renderUsers(container) {
+  const res = await apiGet('getUsers');
+  cache.users = res.data || [];
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>Daftar Akun Pengguna (${cache.users.length} Akun)</h3>
+        <button type="button" class="btn-primary" onclick="openUserModal()"><i data-lucide="user-plus" class="icon-sm"></i><span>Tambah Akun</span></button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Username</th><th>Nama Pengguna</th><th>Peran</th><th>Wilayah</th><th>No. Induk</th><th>Aksi</th></tr></thead>
+          <tbody>
+            ${cache.users.map(u => `
+              <tr>
+                <td><strong>${u.username}</strong></td>
+                <td>${u.nama}</td>
+                <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
+                <td>${u.wilayah}</td>
+                <td>${u.noInduk || '-'}</td>
+                <td>
+                  ${u.username !== 'admin' ? `<button type="button" class="btn-danger" onclick="hapusUser('${u.username}')">Hapus</button>` : '<small style="color:var(--muted)">Utama</small>'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function openUserModal() {
+  openModal('Tambah Akun Login Baru', `
+    <form onsubmit="submitUser(event)">
+      <div class="input-group"><label>Username</label><input id="usName" required></div>
+      <div class="input-group"><label>Kata Sandi</label><input id="usPass" value="123" required></div>
+      <div class="input-group"><label>Peran (Role)</label>
+        <select id="usRole"><option value="jemaat">Jemaat (Warga)</option><option value="admin">Admin / Majelis</option></select>
+      </div>
+      <div class="input-group"><label>Nama Lengkap</label><input id="usNama" required></div>
+      <div class="input-group"><label>Wilayah</label>
+        <select id="usWilayah">${WILAYAH_LIST.map(w => `<option value="${w}">${w}</option>`).join('')}</select>
+      </div>
+      <div class="input-group"><label>Nomor Induk Jemaat</label><input id="usInduk" placeholder="JM-2026-..."></div>
+      <button type="submit" class="btn-primary btn-full">Buat Akun</button>
+    </form>
+  `);
+}
+
+async function submitUser(e) {
+  e.preventDefault();
+  const res = await apiPost({
+    action: 'addUser',
+    username: document.getElementById('usName').value,
+    password: document.getElementById('usPass').value,
+    role: document.getElementById('usRole').value,
+    nama: document.getElementById('usNama').value,
+    wilayah: document.getElementById('usWilayah').value,
+    noInduk: document.getElementById('usInduk').value
+  });
+  if (res.success) { closeModal(); showToast('Akun baru ditambahkan.'); refreshCurrentTab(); }
+  else showToast(res.message || 'Gagal menambah akun.', true);
+}
+
+async function hapusUser(username) {
+  if (!confirm('Hapus akun ' + username + '?')) return;
+  const res = await apiPost({ action: 'deleteUser', username });
+  if (res.success) { showToast('Akun dihapus.'); refreshCurrentTab(); }
+}
+
+// ================= MODAL & PREVIEW PDF =================
 function openModal(title, bodyHtml) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
@@ -1157,11 +881,9 @@ function openModal(title, bodyHtml) {
 
 function closeModal() {
   document.getElementById('modalOverlay').classList.add('hidden');
+  document.getElementById('modalBody').innerHTML = '';
 }
 
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.remove('hidden');
-  setTimeout(() => t.classList.add('hidden'), 3200);
+function previewPdf(previewUrl, title) {
+  openModal(title, `<iframe src="${previewUrl}" style="width:100%;height:70vh;border:none;border-radius:10px;"></iframe>`);
 }

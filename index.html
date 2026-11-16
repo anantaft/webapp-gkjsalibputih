@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistem Administrasi Warga — GKJ Salib Putih</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- HALAMAN LOGIN -->
+  <div id="loginView" class="login-wrapper">
+    <div class="login-card">
+      <div class="brand-badge">
+        <i data-lucide="church" class="icon-xs"></i>
+        <span>GKJ SALIB PUTIH</span>
+      </div>
+      <h1>Sistem Administrasi Warga</h1>
+      <p class="subtitle">Portal Pelayanan Jemaat, Warta, Keuangan & Administrasi Gerejawi</p>
+
+      <div id="connectionStatus" class="status-pill status-checking">
+        <span class="status-dot"></span>
+        <span>Memeriksa koneksi Google Sheets...</span>
+      </div>
+
+      <form id="loginForm" class="form-stack">
+        <div class="input-group">
+          <label for="loginUsername">Username</label>
+          <input type="text" id="loginUsername" placeholder="Contoh: admin atau jemaat" required />
+        </div>
+        <div class="input-group">
+          <label for="loginPassword">Kata Sandi</label>
+          <input type="password" id="loginPassword" placeholder="Masukkan kata sandi" required />
+        </div>
+        <button type="submit" id="btnLogin" class="btn-primary btn-full">
+          <i data-lucide="log-in" class="icon-sm"></i>
+          <span>Masuk ke Sistem</span>
+        </button>
+      </form>
+
+      <div class="demo-hint">
+        <strong>Akun Demo:</strong><br>
+        Admin: <code>admin</code> / <code>123</code> &nbsp;|&nbsp; Jemaat: <code>jemaat</code> / <code>123</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD UTAMA -->
+  <div id="appShell" class="app-shell hidden">
+    <!-- Sidebar Desktop -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-mark">
+          <i data-lucide="church" class="icon-md"></i>
+        </div>
+        <div>
+          <div class="org-title">GKJ Salib Putih</div>
+          <div class="org-sub" id="roleBadgeSidebar">Portal Warga</div>
+        </div>
+      </div>
+
+      <nav id="sidebarNav" class="nav-list"></nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-name" id="userNameDisplay">-</div>
+          <div class="user-wilayah" id="userWilayahDisplay">-</div>
+        </div>
+        <button onclick="logout()" class="btn-logout">
+          <i data-lucide="log-out" class="icon-sm"></i>
+          <span>Keluar</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Konten Utama -->
+    <main class="main-area">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">Beranda</h2>
+          <p id="pageDesc" class="topbar-sub">Sistem Administrasi Warga GKJ Salib Putih</p>
+        </div>
+        <div class="topbar-actions">
+          <button onclick="refreshCurrentTab()" class="btn-outline" title="Muat Ulang Data">
+            <i data-lucide="refresh-cw" class="icon-sm"></i>
+            <span>Segarkan</span>
+          </button>
+          <button onclick="logout()" class="btn-outline mobile-only" title="Keluar">
+            <i data-lucide="log-out" class="icon-sm"></i>
+          </button>
+        </div>
+      </header>
+
+      <div id="contentContainer" class="content-container"></div>
+    </main>
+
+    <!-- Navigasi Bawah Khusus Mobile -->
+    <nav id="bottomNav" class="bottom-nav"></nav>
+  </div>
+
+  <!-- MODAL UNIVERSAL -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalTitle">Form Data</h3>
+        <button onclick="closeModal()" class="modal-close" aria-label="Tutup">
+          <i data-lucide="x" class="icon-md"></i>
+        </button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFIKASI -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

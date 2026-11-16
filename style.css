@@ -749,40 +749,40 @@ tr:hover td { background: #f8fafc; }
   }
 }
 
-/* ================= PERBAIKAN MUTLAK GARIS TABEL PATAH ================= */
-table {
-  width: 100% !important;
-  border-collapse: collapse !important;
-  border-spacing: 0 !important;
+/* ================= PERBAIKAN GARIS TABEL (KHUSUS DESKTOP) & KARTU MOBILE ================= */
+@media (min-width: 769px) {
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+  }
+
+  table tr {
+    display: table-row !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  table thead tr {
+    border-bottom: 2px solid #cbd5e1 !important;
+  }
+
+  table tbody tr:last-child {
+    border-bottom: none !important;
+  }
+
+  table th,
+  table td {
+    display: table-cell !important;
+    vertical-align: middle !important;
+    border-bottom: none !important;
+    padding: 12px 14px !important;
+    float: none !important;
+  }
 }
 
-table tr {
-  display: table-row !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-}
-
-table thead tr {
-  border-bottom: 2px solid #cbd5e1 !important;
-}
-
-table tbody tr:last-child {
-  border-bottom: none !important;
-}
-
-/* Memaksa SEMUA th dan td kembali menjadi table-cell sejati (bukan flex) */
-table th,
-table td {
-  display: table-cell !important;
-  vertical-align: middle !important;
-  border-bottom: none !important; /* Garis dipindah ke tr agar 100% lurus menyatu */
-  padding: 12px 14px !important;
-  float: none !important;
-}
-
-/* Jika di dalam td ada beberapa tombol/ikon agar tetap rapi sejajar */
-table td .action-group,
-table td .btn-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+@media (max-width: 768px) {
+  table td {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
 }

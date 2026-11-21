@@ -749,40 +749,150 @@ tr:hover td { background: #f8fafc; }
   }
 }
 
-/* ================= PERBAIKAN GARIS TABEL (KHUSUS DESKTOP) & KARTU MOBILE ================= */
-@media (min-width: 769px) {
-  table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    border-spacing: 0 !important;
+/* ================= PERBAIKAN MUTLAK GARIS TABEL PATAH ================= */
+table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+}
+
+table tr {
+  display: table-row !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+table thead tr {
+  border-bottom: 2px solid #cbd5e1 !important;
+}
+
+table tbody tr:last-child {
+  border-bottom: none !important;
+}
+
+/* Memaksa SEMUA th dan td kembali menjadi table-cell sejati (bukan flex) */
+table th,
+table td {
+  display: table-cell !important;
+  vertical-align: middle !important;
+  border-bottom: none !important; /* Garis dipindah ke tr agar 100% lurus menyatu */
+  padding: 12px 14px !important;
+  float: none !important;
+}
+
+/* Jika di dalam td ada beberapa tombol/ikon agar tetap rapi sejajar */
+table td .action-group,
+table td .btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ================= PERBAIKAN MUTLAK TABEL MOBILE ================= */
+@media (max-width: 768px) {
+  .table-wrap {
+    overflow-x: visible !important;
   }
 
-  table tr {
-    display: table-row !important;
+  .table-wrap table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    border: none !important;
+  }
+
+  .table-wrap thead {
+    display: none !important;
+  }
+
+  .table-wrap tbody {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .table-wrap tbody tr {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-wrap tbody td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 6px 0 !important;
+    border: none !important;
+    border-bottom: 1px dashed #f1f5f9 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-wrap tbody td:first-child {
+    padding-top: 0 !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 4px !important;
     border-bottom: 1px solid #e2e8f0 !important;
   }
 
-  table thead tr {
-    border-bottom: 2px solid #cbd5e1 !important;
-  }
-
-  table tbody tr:last-child {
+  .table-wrap tbody td:last-child {
     border-bottom: none !important;
+    padding-bottom: 0 !important;
+    padding-top: 8px !important;
   }
 
-  table th,
-  table td {
+  /* Rapikan tombol aksi & search bar di mobile */
+  .table-wrap .action-group {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .table-wrap .action-group button {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+
+  .search-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .search-input-wrap {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .btn-search,
+  .btn-reset-search {
+    flex: 1 !important;
+    justify-content: center !important;
+  }
+
+  /* Kembalikan tabel 2 kolom normal khusus di dalam modal Detail */
+  .modal-box table {
+    display: table !important;
+    width: 100% !important;
+  }
+  .modal-box tbody {
+    display: table-row-group !important;
+  }
+  .modal-box tr {
+    display: table-row !important;
+  }
+  .modal-box td {
     display: table-cell !important;
-    vertical-align: middle !important;
-    border-bottom: none !important;
-    padding: 12px 14px !important;
-    float: none !important;
-  }
-}
-
-@media (max-width: 768px) {
-  table td {
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
+    width: auto !important;
+    padding: 8px 10px !important;
   }
 }

@@ -1,6 +1,6 @@
 // ================= KONFIGURASI URL APPS SCRIPT & GOOGLE CLIENT ID =================
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxWEJ8rfi_18QdKJ8RWzjftTLsLEsW8ce4gN5o7B5E0nwpYYjOxj-M7tqNb-0aRzY37iQ/exec';
-const GOOGLE_CLIENT_ID = ''; // Kosongkan selama tahap prototype
+const GOOGLE_CLIENT_ID = '';
 
 const WILAYAH_LIST = [
   'Gereja Induk Salib Putih',
@@ -16,7 +16,8 @@ const JENIS_SURAT_LIST = [
   'Surat Pengantar Nikah',
   'Surat Pengantar Baptis / Sidi',
   'Surat Atestasi Keluar',
-  'Surat Keterangan Kematian'
+  'Surat Keterangan Kematian',
+  'Lainnya'
 ];
 
 let currentUser = null;
@@ -33,7 +34,7 @@ function showToast(msg, isError = false) {
   el.textContent = msg;
   el.style.background = isError ? '#dc2626' : '#0f172a';
   el.classList.remove('hidden');
-  setTimeout(() => el.classList.add('hidden'), 3400);
+  setTimeout(() => el.classList.add('hidden'), 3800);
 }
 
 function formatRupiah(num) {
@@ -47,6 +48,32 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// ================= HELPER OPSI "LAINNYA" PADA JENIS SURAT =================
+function toggleJenisSuratInput(selectId, wrapperId, inputId) {
+  const selectEl = document.getElementById(selectId);
+  const wrapperEl = document.getElementById(wrapperId);
+  const inputEl = document.getElementById(inputId);
+  if (!selectEl || !wrapperEl || !inputEl) return;
+
+  if (selectEl.value === 'Lainnya') {
+    wrapperEl.classList.remove('hidden');
+    inputEl.setAttribute('required', 'true');
+    inputEl.focus();
+  } else {
+    wrapperEl.classList.add('hidden');
+    inputEl.removeAttribute('required');
+    inputEl.value = '';
+  }
+}
+
+function resolveJenisSuratValue(selectId, inputId) {
+  const selectVal = document.getElementById(selectId).value;
+  if (selectVal === 'Lainnya') {
+    return document.getElementById(inputId).value.trim();
+  }
+  return selectVal;
 }
 
 // ================= NAVIGASI LANDING, LOGIN & REGISTRASI =================
@@ -97,7 +124,6 @@ function switchAuthMode(mode) {
   renderIcons();
 }
 
-// ================= GOOGLE SIGN-IN (DITUNDA UNTUK PROTOTYPE) =================
 function initGoogleSignIn() {
   const wrapper = document.getElementById('googleBtnWrapper');
   if (!wrapper) return;
@@ -177,7 +203,7 @@ async function loadLandingData() {
   }
 }
 
-// ================= PROSES LOGIN & REGISTRASI MANDIRI =================
+// ================= PROSES LOGIN & REGISTRASI MANDIRI (MENUNGGU ACC ADMIN) =================
 async function handleLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
 
@@ -194,18 +220,14 @@ async function handleLogin(e) {
   btn.innerHTML = '<span>Memverifikasi akun...</span>';
 
   try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'login', username, password })
-    });
-    const json = await res.json();
+    const res = await apiPost({ action: 'login', username, password });
 
-    if (json.success && json.user) {
-      currentUser = json.user;
+    if (res.success && res.user) {
+      currentUser = res.user;
       localStorage.setItem('gkjsp_user', JSON.stringify(currentUser));
       initApp();
     } else {
-      showToast(json.message || 'Username atau kata sandi salah.', true);
+      showToast(res.message || 'Username atau kata sandi salah.', true);
     }
   } catch (err) {
     showToast('Gagal terhubung ke server Google Apps Script.', true);
@@ -227,69 +249,38 @@ async function handleRegister(e) {
   const password = document.getElementById('regPassword')?.value.trim() || '';
 
   if (!nama || !username || password.length < 3) {
-    alert('Nama, username, dan kata sandi (minimal 3 karakter) wajib diisi.');
+    showToast('Nama, username, dan kata sandi (min. 3 karakter) wajib diisi.', true);
     return;
   }
-
-  // Otomatis deteksi variabel URL Apps Script yang dipakai di app.js
-  const endpointUrl =
-    (typeof GAS_WEB_APP_URL !== 'undefined' && GAS_WEB_APP_URL) ||
-    (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL) ||
-    (typeof API_URL !== 'undefined' && API_URL) ||
-    (typeof WEB_APP_URL !== 'undefined' && WEB_APP_URL);
-
-  if (!endpointUrl) {
-    alert('URL Google Apps Script tidak ditemukan di app.js. Cek nama variabel URL di baris paling atas app.js.');
-    return;
-  }
-
-  const payload = {
-    action: 'registerJemaat',
-    nama: nama,
-    wilayah: wilayah,
-    noInduk: noInduk,
-    username: username,
-    password: password
-  };
 
   btn.disabled = true;
-  btn.innerHTML = '<span>Mendaftarkan akun...</span>';
+  btn.innerHTML = '<span>Mengirim pendaftaran...</span>';
 
   try {
-    const res = await fetch(endpointUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+    const json = await apiPost({
+      action: 'registerJemaat',
+      nama,
+      wilayah,
+      noInduk,
+      username,
+      password
     });
 
-    const text = await res.text();
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch (parseErr) {
-      console.error('Respon mentah dari server:', text);
-      throw new Error('Server mengembalikan respon bukan JSON (cek izin akses Web App: Anyone).');
-    }
-
-    if (json.success && json.user) {
-      currentUser = json.user;
-      localStorage.setItem('gkjsp_user', JSON.stringify(currentUser));
-      if (typeof showToast === 'function') {
-        showToast('Pendaftaran berhasil! Selamat datang, ' + currentUser.nama);
-      } else {
-        alert('Pendaftaran berhasil! Selamat datang, ' + currentUser.nama);
-      }
-      if (typeof initApp === 'function') initApp();
+    if (json.success) {
+      document.getElementById('registerForm').reset();
+      switchAuthMode('login');
+      document.getElementById('loginUsername').value = username;
+      showToast(json.message || 'Pendaftaran berhasil! Silakan tunggu ACC dari Admin/Majelis.');
+      alert('Pendaftaran Berhasil!\n\nAkun Anda ("' + username + '") telah masuk ke daftar verifikasi Sekretariat / Majelis Gereja. Silakan coba login kembali setelah akun di-ACC oleh Admin.');
     } else {
-      alert('Gagal mendaftar: ' + (json.message || 'Username sudah terdaftar.'));
+      showToast(json.message || 'Gagal mendaftar.', true);
     }
   } catch (err) {
-    console.error('Error registrasi:', err);
-    alert('Error: ' + err.message);
+    showToast('Error: ' + err.message, true);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i data-lucide="user-plus" class="icon-sm"></i><span>Daftarkan Akun & Masuk</span>';
-    if (typeof renderIcons === 'function') renderIcons();
+    btn.innerHTML = '<i data-lucide="user-plus" class="icon-sm"></i><span>Ajukan Pendaftaran Akun</span>';
+    renderIcons();
   }
 }
 
@@ -355,7 +346,7 @@ function switchTab(tabId) {
     surat: ['Layanan Administrasi Surat', 'Pengajuan, verifikasi, dan arsip surat keterangan gerejawi'],
     keuangan: ['Laporan Keuangan Gereja', 'Transparansi pemasukan persembahan & pengeluaran bidang'],
     warta: ['Warta Jemaat & Tata Ibadah', 'Arsip digital Warta Jemaat GKJ Salib Putih'],
-    users: ['Manajemen Akun Pengguna', 'Kelola akun login Admin Majelis dan Warga Jemaat']
+    users: ['Manajemen Akun & Verifikasi', 'ACC pendaftaran warga baru dan kelola akun pengguna']
   };
   document.getElementById('pageTitle').textContent = titles[tabId][0];
   document.getElementById('pageDesc').textContent = titles[tabId][1];
@@ -370,9 +361,15 @@ async function apiGet(action) {
 async function apiPost(payload) {
   const res = await fetch(GAS_WEB_APP_URL, {
     method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload)
   });
-  return await res.json();
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('Respon server tidak valid. Pastikan Web App Google Apps Script sudah di-deploy ulang (New Version).');
+  }
 }
 
 async function refreshCurrentTab() {
@@ -394,19 +391,27 @@ async function refreshCurrentTab() {
 
 // ================= 1. DASHBOARD =================
 async function renderDashboard(container) {
-  const [resJemaat, resSurat, resKeu, resWarta] = await Promise.all([
-    apiGet('getJemaat'), apiGet('getSurat'), apiGet('getKeuangan'), apiGet('getWarta')
-  ]);
+  const isAdmin = currentUser.role === 'admin';
+  const requests = [
+    apiGet('getJemaat'),
+    apiGet('getSurat'),
+    apiGet('getKeuangan'),
+    apiGet('getWarta')
+  ];
+  if (isAdmin) requests.push(apiGet('getUsers'));
+
+  const [resJemaat, resSurat, resKeu, resWarta, resUsers] = await Promise.all(requests);
   cache.jemaat = resJemaat.data || [];
   cache.surat = resSurat.data || [];
   cache.keuangan = resKeu.data || [];
   cache.warta = resWarta.data || [];
+  if (isAdmin && resUsers) cache.users = resUsers.data || [];
 
-  const isAdmin = currentUser.role === 'admin';
   const totalIn = cache.keuangan.filter(k => k.jenis === 'Pemasukan').reduce((a, b) => a + Number(b.nominal), 0);
   const totalOut = cache.keuangan.filter(k => k.jenis === 'Pengeluaran').reduce((a, b) => a + Number(b.nominal), 0);
   const saldo = totalIn - totalOut;
   const suratProses = cache.surat.filter(s => s.status === 'Proses').length;
+  const pendingUsersCount = isAdmin ? cache.users.filter(u => (u.status || '').toLowerCase() === 'pending').length : 0;
 
   const wilayahCounts = WILAYAH_LIST.map(w => ({
     nama: w,
@@ -414,7 +419,22 @@ async function renderDashboard(container) {
   }));
   const maxW = Math.max(...wilayahCounts.map(w => w.jumlah), 1);
 
+  const latestWartaList = cache.warta.slice(0, 3);
+
   container.innerHTML = `
+    ${isAdmin && pendingUsersCount > 0 ? `
+      <div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:14px 18px;border-radius:14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i data-lucide="user-check" class="icon-md"></i>
+          <div>
+            <strong>Ada ${pendingUsersCount} Pendaftaran Akun Warga Menunggu ACC!</strong>
+            <div style="font-size:12.5px;">Segera verifikasi agar warga jemaat dapat masuk dan menggunakan layanan surat.</div>
+          </div>
+        </div>
+        <button type="button" class="btn-primary btn-sm" onclick="switchTab('users')">Verifikasi Sekarang →</button>
+      </div>
+    ` : ''}
+
     <div class="hero-banner">
       <div>
         <span class="hero-tag">${isAdmin ? 'Panel Majelis & Sekretariat' : 'Portal Warga Jemaat'}</span>
@@ -428,7 +448,7 @@ async function renderDashboard(container) {
         </button>
         <button type="button" class="btn-banner-white" onclick="switchTab('warta')">
           <i data-lucide="book-open" class="icon-sm"></i>
-          <span>Baca Warta</span>
+          <span>Arsip Warta</span>
         </button>
       </div>
     </div>
@@ -468,6 +488,38 @@ async function renderDashboard(container) {
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-header">
+        <div>
+          <h3>Warta Jemaat Terbaru</h3>
+          <p style="font-size:12.5px;color:var(--muted);margin-top:2px;">Edisi Warta Jemaat & Tata Ibadah terkini yang baru diunggah ke sistem</p>
+        </div>
+        <button type="button" class="link-more" onclick="switchTab('warta')">Lihat Semua Warta →</button>
+      </div>
+      <div class="warta-grid">
+        ${latestWartaList.length ? latestWartaList.map((w, idx) => `
+          <div class="warta-card">
+            <div class="warta-cover">
+              ${idx === 0 ? `<span class="badge-terbaru">Terbaru</span>` : ''}
+              <img src="${w.thumbnailUrl}" alt="${w.namaFile}" onerror="this.src='https://placehold.co/400x520/e2e8f0/1e3a8a?text=Warta+GKJSP'">
+            </div>
+            <div class="warta-body">
+              <div class="warta-title">${w.namaFile}</div>
+              <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
+              <div class="warta-actions">
+                <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
+                  <i data-lucide="book-open" class="icon-sm"></i><span>Baca Warta</span>
+                </button>
+                <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh PDF">
+                  <i data-lucide="download" class="icon-sm"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        `).join('') : '<p style="font-size:13px;color:var(--muted);">Belum ada edisi Warta Jemaat yang tersedia.</p>'}
+      </div>
+    </div>
+
     <div class="dash-grid-2">
       <div class="card">
         <div class="card-header">
@@ -494,7 +546,7 @@ async function renderDashboard(container) {
                 <strong>${s.jenisSurat}</strong>
                 <span>${s.pemohon} • ${s.tanggal}</span>
               </div>
-              <span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : 'badge-proses'}">${s.status}</span>
+              <span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span>
             </div>
           `).join('') || '<p style="font-size:13px;color:var(--muted);">Belum ada permohonan surat.</p>'}
         </div>
@@ -503,7 +555,7 @@ async function renderDashboard(container) {
   `;
 }
 
-// ================= HELPER KOMPONEN SEARCH BAR =================
+// ================= HELPER KOMPONEN SEARCH BAR & DETAIL VIEW =================
 function renderSearchBar(inputId, placeholder, handlerName) {
   return `
     <div class="search-toolbar">
@@ -527,6 +579,23 @@ function resetSearch(inputId, handlerFn) {
     el.value = '';
     handlerFn();
   }
+}
+
+function renderDetailTable(rows) {
+  return `
+    <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:14px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tbody>
+          ${rows.map(([label, val]) => `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="width:38%;background:#f8fafc;font-weight:700;color:#475569;font-size:12.5px;padding:10px 12px;">${label}</td>
+              <td style="font-size:13px;color:#0f172a;padding:10px 12px;">${val || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ================= 2. DATA JEMAAT =================
@@ -595,9 +664,7 @@ function filterJemaat() {
 
   const filtered = cache.jemaat.filter(j => {
     if (!q) return true;
-    if (!isAdmin) {
-      return `${j.nama} ${j.wilayah}`.toLowerCase().includes(q);
-    }
+    if (!isAdmin) return `${j.nama} ${j.wilayah}`.toLowerCase().includes(q);
     return `${j.noInduk} ${j.noKK} ${j.nama} ${j.wilayah} ${j.statusBaptisSidi} ${j.noHP} ${j.alamat}`.toLowerCase().includes(q);
   });
 
@@ -621,11 +688,37 @@ function filterJemaat() {
       <td>${j.statusBaptisSidi}</td>
       <td>${j.noHP || '-'}</td>
       <td style="white-space:nowrap;">
-        <button type="button" class="btn-outline btn-sm" onclick="openJemaatModal('${j.noInduk}')">Edit</button>
-        <button type="button" class="btn-danger" onclick="hapusJemaat('${j.noInduk}')">Hapus</button>
+        <div class="action-group">
+          <button type="button" class="btn-outline btn-sm" onclick="viewJemaatDetail('${j.noInduk}')">Detail</button>
+          <button type="button" class="btn-outline btn-sm" onclick="openJemaatModal('${j.noInduk}')">Edit</button>
+          <button type="button" class="btn-danger" onclick="hapusJemaat('${j.noInduk}')">Hapus</button>
+        </div>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="7">Data jemaat tidak ditemukan.</td></tr>';
+}
+
+function viewJemaatDetail(noInduk) {
+  const j = cache.jemaat.find(x => x.noInduk === noInduk);
+  if (!j) return;
+  openModal('Detail Data Warga Jemaat', `
+    ${renderDetailTable([
+      ['Nomor Induk Jemaat', `<strong>${j.noInduk}</strong>`],
+      ['Nomor KK Gereja', j.noKK],
+      ['Nama Lengkap', `<strong>${j.nama}</strong>`],
+      ['Jenis Kelamin', j.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'],
+      ['Tempat, Tanggal Lahir', j.tempatTglLahir],
+      ['Wilayah / Pepanthan', j.wilayah],
+      ['Status Sakramen', j.statusBaptisSidi],
+      ['Status Keanggotaan', `<span class="badge badge-selesai">${j.statusKeanggotaan || 'Aktif'}</span>`],
+      ['No. HP / WhatsApp', j.noHP],
+      ['Alamat Lengkap', j.alamat]
+    ])}
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="btn-outline" onclick="closeModal()">Tutup</button>
+      <button type="button" class="btn-primary" onclick="openJemaatModal('${j.noInduk}')">Edit Data Ini</button>
+    </div>
+  `);
 }
 
 function openJemaatModal(noInduk = null) {
@@ -651,6 +744,13 @@ function openJemaatModal(noInduk = null) {
           <option value="Simpatisan" ${j.statusBaptisSidi === 'Simpatisan' ? 'selected' : ''}>Simpatisan</option>
         </select>
       </div>
+      <div class="input-group"><label>Status Keanggotaan</label>
+        <select id="jmStatusAnggota">
+          <option value="Aktif" ${(j.statusKeanggotaan || 'Aktif') === 'Aktif' ? 'selected' : ''}>Aktif</option>
+          <option value="Pindah / Atestasi" ${j.statusKeanggotaan === 'Pindah / Atestasi' ? 'selected' : ''}>Pindah / Atestasi</option>
+          <option value="Meninggal Dunia" ${j.statusKeanggotaan === 'Meninggal Dunia' ? 'selected' : ''}>Meninggal Dunia</option>
+        </select>
+      </div>
       <div class="input-group"><label>No. HP / WhatsApp</label><input id="jmHP" value="${j.noHP || ''}"></div>
       <div class="input-group"><label>Alamat Lengkap</label><textarea id="jmAlamat" rows="2">${j.alamat || ''}</textarea></div>
       <button type="submit" class="btn-primary btn-full">Simpan Data Jemaat</button>
@@ -669,7 +769,7 @@ async function submitJemaat(e, noInduk) {
     tempatTglLahir: document.getElementById('jmTTL').value,
     wilayah: document.getElementById('jmWilayah').value,
     statusBaptisSidi: document.getElementById('jmBaptis').value,
-    statusKeanggotaan: 'Aktif',
+    statusKeanggotaan: document.getElementById('jmStatusAnggota').value,
     noHP: document.getElementById('jmHP').value,
     alamat: document.getElementById('jmAlamat').value
   };
@@ -687,7 +787,7 @@ async function hapusJemaat(noInduk) {
   if (res.success) { showToast('Data jemaat dihapus.'); refreshCurrentTab(); }
 }
 
-// ================= 3. LAYANAN SURAT =================
+// ================= 3. LAYANAN SURAT (OPSI "LAINNYA" + KETIK MANUAL) =================
 async function renderSurat(container) {
   const res = await apiGet('getSurat');
   const all = res.data || [];
@@ -735,16 +835,45 @@ function filterSurat() {
       <td>${s.jenisSurat}</td>
       <td>${s.tujuanSurat}</td>
       <td>
-        ${s.berkasPendukungUrl ? `<a href="${s.berkasPendukungUrl}" target="_blank" class="link-more">Berkas Pemohon</a><br>` : ''}
-        ${s.arsipSuratUrl ? `<a href="${s.arsipSuratUrl}" target="_blank" class="link-more" style="color:var(--success)">Surat Resmi PDF</a>` : '-'}
+        ${s.berkasPendukungUrl ? `<button type="button" class="link-more" onclick="previewPdf('${s.berkasPendukungUrl}', 'Berkas Pendukung ${s.idSurat}')">Lihat Berkas</button><br>` : ''}
+        ${s.arsipSuratUrl ? `<button type="button" class="link-more" style="color:var(--success)" onclick="previewPdf('${s.arsipSuratUrl}', 'Surat Resmi ${s.idSurat}')">Surat Resmi PDF</button>` : (!s.berkasPendukungUrl ? '-' : '')}
       </td>
       <td><span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span></td>
       <td style="white-space:nowrap;">
-        ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openSuratAdminModal('${s.idSurat}')">Proses</button>` : ''}
-        ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusSurat('${s.idSurat}')">Hapus</button>` : '-'}
+        <div class="action-group">
+          <button type="button" class="btn-outline btn-sm" onclick="viewSuratDetail('${s.idSurat}')">Detail</button>
+          ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openSuratAdminModal('${s.idSurat}')">Edit / Proses</button>` : ''}
+          ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusSurat('${s.idSurat}')">Hapus</button>` : ''}
+        </div>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="7">Data permohonan surat tidak ditemukan.</td></tr>';
+}
+
+function viewSuratDetail(idSurat) {
+  const s = cache.surat.find(x => x.idSurat === idSurat);
+  if (!s) return;
+  const isAdmin = currentUser.role === 'admin';
+  openModal('Detail Permohonan Surat ' + s.idSurat, `
+    ${renderDetailTable([
+      ['ID Permohonan', `<strong>${s.idSurat}</strong>`],
+      ['Tanggal Pengajuan', s.tanggal],
+      ['Nama Pemohon', `<strong>${s.pemohon}</strong>`],
+      ['Nomor Induk Jemaat', s.noInduk],
+      ['Wilayah / Pepanthan', s.wilayah],
+      ['Jenis Surat', s.jenisSurat],
+      ['Instansi / Gereja Tujuan', s.tujuanSurat],
+      ['Alamat Tujuan', s.alamatTujuan],
+      ['No. WhatsApp Aktif', s.noWA],
+      ['Status Permohonan', `<span class="badge ${s.status === 'Selesai' ? 'badge-selesai' : (s.status === 'Ditolak' ? 'badge-ditolak' : 'badge-proses')}">${s.status}</span>`],
+      ['Lampiran Pemohon', s.berkasPendukungUrl ? `<button type="button" class="btn-outline btn-sm" onclick="previewPdf('${s.berkasPendukungUrl}', 'Berkas ${s.idSurat}')">Buka Berkas Pendukung</button>` : 'Tidak ada lampiran'],
+      ['Arsip Surat Resmi', s.arsipSuratUrl ? `<button type="button" class="btn-primary btn-sm" onclick="previewPdf('${s.arsipSuratUrl}', 'Surat Resmi ${s.idSurat}')">Buka Surat Resmi PDF</button>` : 'Belum diterbitkan']
+    ])}
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="btn-outline" onclick="closeModal()">Tutup</button>
+      ${isAdmin ? `<button type="button" class="btn-primary" onclick="openSuratAdminModal('${s.idSurat}')">Edit / Proses Surat</button>` : ''}
+    </div>
+  `);
 }
 
 function openSuratModal() {
@@ -756,12 +885,21 @@ function openSuratModal() {
         <select id="srWilayah">${WILAYAH_LIST.map(w => `<option value="${w}" ${currentUser.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
       </div>
       <div class="input-group"><label>Jenis Surat</label>
-        <select id="srJenis">${JENIS_SURAT_LIST.map(j => `<option value="${j}">${j}</option>`).join('')}</select>
+        <select id="srJenis" onchange="toggleJenisSuratInput('srJenis', 'srJenisLainnyaWrap', 'srJenisLainnya')">
+          ${JENIS_SURAT_LIST.map(j => `<option value="${j}">${j === 'Lainnya' ? 'Lainnya (Ketik manual...)' : j}</option>`).join('')}
+        </select>
+      </div>
+      <div id="srJenisLainnyaWrap" class="input-group hidden">
+        <label>Tulis Jenis Surat yang Dibutuhkan</label>
+        <input type="text" id="srJenisLainnya" placeholder="Contoh: Surat Keterangan Belum Menikah / Surat Rekomendasi">
       </div>
       <div class="input-group"><label>Instansi / Gereja Tujuan</label><input id="srTujuan" placeholder="Contoh: Majelis GKJ Salatiga / KUA" required></div>
       <div class="input-group"><label>Alamat Tujuan</label><input id="srAlamat" placeholder="Alamat instansi tujuan"></div>
       <div class="input-group"><label>No. WhatsApp Aktif</label><input id="srWA" placeholder="0812..." required></div>
-      <div class="input-group"><label>Lampiran Berkas Pendukung (PDF/Foto, Opsional)</label><input type="file" id="srFile" accept=".pdf,image/*"></div>
+      <div class="input-group">
+        <label>Upload Berkas Pendukung (KTP/KK/Surat Baptis - PDF/JPG/PNG, Maks. 5 MB)</label>
+        <input type="file" id="srFile" accept=".pdf,image/*">
+      </div>
       <button type="submit" id="btnSubmitSurat" class="btn-primary btn-full">Kirim Permohonan Surat</button>
     </form>
   `);
@@ -769,46 +907,91 @@ function openSuratModal() {
 
 async function submitSuratBaru(e) {
   e.preventDefault();
-  const btn = document.getElementById('btnSubmitSurat');
-  btn.disabled = true; btn.textContent = 'Mengunggah & mengirim...';
-
-  const fileInput = document.getElementById('srFile');
-  let berkasBase64 = '', berkasName = '', berkasMime = '';
-  if (fileInput.files && fileInput.files[0]) {
-    const f = fileInput.files[0];
-    berkasBase64 = await fileToBase64(f);
-    berkasName = f.name;
-    berkasMime = f.type;
+  const jenisSuratFinal = resolveJenisSuratValue('srJenis', 'srJenisLainnya');
+  if (!jenisSuratFinal) {
+    showToast('Harap isi jenis surat yang dibutuhkan.', true);
+    return;
   }
 
-  const res = await apiPost({
-    action: 'addSurat',
-    pemohon: document.getElementById('srPemohon').value,
-    noInduk: document.getElementById('srNoInduk').value,
-    wilayah: document.getElementById('srWilayah').value,
-    jenisSurat: document.getElementById('srJenis').value,
-    tujuanSurat: document.getElementById('srTujuan').value,
-    alamatTujuan: document.getElementById('srAlamat').value,
-    noWA: document.getElementById('srWA').value,
-    berkasBase64, berkasName, berkasMime,
-    status: 'Proses'
-  });
+  const btn = document.getElementById('btnSubmitSurat');
+  const fileInput = document.getElementById('srFile');
+  let berkasBase64 = '', berkasName = '', berkasMime = '';
 
-  if (res.success) {
-    closeModal();
-    showToast('Permohonan surat berhasil dikirim.');
-    refreshCurrentTab();
+  if (fileInput.files && fileInput.files[0]) {
+    const f = fileInput.files[0];
+    if (f.size > 5 * 1024 * 1024) {
+      showToast('Ukuran berkas terlalu besar (maksimal 5 MB).', true);
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Mengunggah berkas ke Google Drive...';
+    berkasBase64 = await fileToBase64(f);
+    berkasName = f.name;
+    berkasMime = f.type || 'application/pdf';
   } else {
-    btn.disabled = false; btn.textContent = 'Kirim Permohonan Surat';
-    showToast(res.message || 'Gagal mengirim.', true);
+    btn.disabled = true;
+    btn.textContent = 'Mengirim permohonan...';
+  }
+
+  try {
+    const res = await apiPost({
+      action: 'addSurat',
+      pemohon: document.getElementById('srPemohon').value,
+      noInduk: document.getElementById('srNoInduk').value,
+      wilayah: document.getElementById('srWilayah').value,
+      jenisSurat: jenisSuratFinal,
+      tujuanSurat: document.getElementById('srTujuan').value,
+      alamatTujuan: document.getElementById('srAlamat').value,
+      noWA: document.getElementById('srWA').value,
+      berkasBase64,
+      berkasName,
+      berkasMime,
+      status: 'Proses'
+    });
+
+    if (res.success) {
+      closeModal();
+      showToast('Permohonan surat & berkas berhasil dikirim.');
+      refreshCurrentTab();
+    } else {
+      throw new Error(res.message || 'Gagal mengirim permohonan.');
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Kirim Permohonan Surat';
+    showToast(err.message, true);
   }
 }
 
 function openSuratAdminModal(idSurat) {
   const s = cache.surat.find(x => x.idSurat === idSurat);
-  openModal('Proses & Arsipkan Surat ' + idSurat, `
+  if (!s) return;
+
+  const opsiStandar = JENIS_SURAT_LIST.filter(j => j !== 'Lainnya');
+  const isCustomJenis = s.jenisSurat && !opsiStandar.includes(s.jenisSurat);
+
+  openModal('Edit & Proses Surat ' + idSurat, `
     <form onsubmit="submitUpdateSurat(event, '${idSurat}')">
-      <div class="input-group"><label>Pemohon</label><input value="${s.pemohon} (${s.jenisSurat})" disabled></div>
+      <div class="input-group"><label>Nama Pemohon</label><input id="admSrPemohon" value="${s.pemohon}" required></div>
+      <div class="input-group"><label>Nomor Induk Jemaat</label><input id="admSrNoInduk" value="${s.noInduk || ''}"></div>
+      <div class="input-group"><label>Wilayah / Pepanthan</label>
+        <select id="admSrWilayah">${WILAYAH_LIST.map(w => `<option value="${w}" ${s.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
+      </div>
+      <div class="input-group"><label>Jenis Surat</label>
+        <select id="admSrJenis" onchange="toggleJenisSuratInput('admSrJenis', 'admSrJenisLainnyaWrap', 'admSrJenisLainnya')">
+          ${JENIS_SURAT_LIST.map(j => {
+            const isSelected = (j === 'Lainnya' && isCustomJenis) || (!isCustomJenis && s.jenisSurat === j);
+            return `<option value="${j}" ${isSelected ? 'selected' : ''}>${j === 'Lainnya' ? 'Lainnya (Ketik manual...)' : j}</option>`;
+          }).join('')}
+        </select>
+      </div>
+      <div id="admSrJenisLainnyaWrap" class="input-group ${isCustomJenis ? '' : 'hidden'}">
+        <label>Tulis Jenis Surat (Manual)</label>
+        <input type="text" id="admSrJenisLainnya" value="${isCustomJenis ? s.jenisSurat : ''}" ${isCustomJenis ? 'required' : ''} placeholder="Masukkan jenis surat...">
+      </div>
+      <div class="input-group"><label>Instansi / Gereja Tujuan</label><input id="admSrTujuan" value="${s.tujuanSurat || ''}" required></div>
+      <div class="input-group"><label>Alamat Tujuan</label><input id="admSrAlamat" value="${s.alamatTujuan || ''}"></div>
+      <div class="input-group"><label>No. WhatsApp</label><input id="admSrWA" value="${s.noWA || ''}"></div>
       <div class="input-group"><label>Status Permohonan</label>
         <select id="admSrStatus">
           <option value="Proses" ${s.status === 'Proses' ? 'selected' : ''}>Proses</option>
@@ -817,15 +1000,21 @@ function openSuratAdminModal(idSurat) {
         </select>
       </div>
       <div class="input-group"><label>Unggah PDF Surat Resmi (Opsional)</label><input type="file" id="admSrPdf" accept=".pdf"></div>
-      <button type="submit" id="btnUpdSurat" class="btn-primary btn-full">Simpan Perubahan Status</button>
+      <button type="submit" id="btnUpdSurat" class="btn-primary btn-full">Simpan Perubahan Surat</button>
     </form>
   `);
 }
 
 async function submitUpdateSurat(e, idSurat) {
   e.preventDefault();
+  const jenisSuratFinal = resolveJenisSuratValue('admSrJenis', 'admSrJenisLainnya');
+  if (!jenisSuratFinal) {
+    showToast('Harap isi jenis surat.', true);
+    return;
+  }
+
   const btn = document.getElementById('btnUpdSurat');
-  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  btn.disabled = true; btn.textContent = 'Menyimpan perubahan...';
 
   const fileInput = document.getElementById('admSrPdf');
   let arsipBase64 = '', arsipFileName = '';
@@ -834,18 +1023,32 @@ async function submitUpdateSurat(e, idSurat) {
     arsipFileName = fileInput.files[0].name;
   }
 
-  const res = await apiPost({
-    action: 'updateSurat',
-    idSurat,
-    status: document.getElementById('admSrStatus').value,
-    arsipBase64,
-    arsipFileName
-  });
+  try {
+    const res = await apiPost({
+      action: 'updateSurat',
+      idSurat,
+      pemohon: document.getElementById('admSrPemohon').value,
+      noInduk: document.getElementById('admSrNoInduk').value,
+      wilayah: document.getElementById('admSrWilayah').value,
+      jenisSurat: jenisSuratFinal,
+      tujuanSurat: document.getElementById('admSrTujuan').value,
+      alamatTujuan: document.getElementById('admSrAlamat').value,
+      noWA: document.getElementById('admSrWA').value,
+      status: document.getElementById('admSrStatus').value,
+      arsipBase64,
+      arsipFileName
+    });
 
-  if (res.success) {
-    closeModal();
-    showToast('Status surat diperbarui.');
-    refreshCurrentTab();
+    if (res.success) {
+      closeModal();
+      showToast('Data & status surat diperbarui.');
+      refreshCurrentTab();
+    } else {
+      throw new Error(res.message || 'Gagal memperbarui surat.');
+    }
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Simpan Perubahan Surat';
+    showToast(err.message, true);
   }
 }
 
@@ -880,7 +1083,7 @@ async function renderKeuangan(container) {
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Tanggal</th><th>Uraian Transaksi</th><th>Bidang / Pos</th><th>Jenis</th><th>Nominal</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr>
+            <tr><th>Tanggal</th><th>Uraian Transaksi</th><th>Bidang / Pos</th><th>Jenis</th><th>Nominal</th><th>Aksi</th></tr>
           </thead>
           <tbody id="keuanganTableBody"></tbody>
         </table>
@@ -907,31 +1110,63 @@ function filterKeuangan() {
       <td>${k.bidangPos}</td>
       <td><span class="badge ${k.jenis === 'Pemasukan' ? 'badge-in' : 'badge-out'}">${k.jenis}</span></td>
       <td><strong>${formatRupiah(k.nominal)}</strong></td>
-      ${isAdmin ? `<td><button type="button" class="btn-danger" onclick="hapusKeuangan('${k.idTransaksi}')">Hapus</button></td>` : ''}
+      <td style="white-space:nowrap;">
+        <div class="action-group">
+          <button type="button" class="btn-outline btn-sm" onclick="viewKeuanganDetail('${k.idTransaksi}')">Detail</button>
+          ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openKeuanganModal('${k.idTransaksi}')">Edit</button>` : ''}
+          ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusKeuangan('${k.idTransaksi}')">Hapus</button>` : ''}
+        </div>
+      </td>
     </tr>
-  `).join('') || `<tr><td colspan="${isAdmin ? 6 : 5}">Data transaksi keuangan tidak ditemukan.</td></tr>`;
+  `).join('') || `<tr><td colspan="6">Data transaksi keuangan tidak ditemukan.</td></tr>`;
 }
 
-function openKeuanganModal() {
-  openModal('Catat Transaksi Keuangan Baru', `
-    <form onsubmit="submitKeuangan(event)">
-      <div class="input-group"><label>Tanggal</label><input id="keuTgl" value="16 Nov 2026" required></div>
-      <div class="input-group"><label>Uraian Transaksi</label><input id="keuUraian" placeholder="Contoh: Persembahan Ibadah Minggu" required></div>
-      <div class="input-group"><label>Bidang / Pos Anggaran</label><input id="keuPos" value="Persembahan Rutin" required></div>
+function viewKeuanganDetail(idTransaksi) {
+  const k = cache.keuangan.find(x => x.idTransaksi === idTransaksi);
+  if (!k) return;
+  const isAdmin = currentUser.role === 'admin';
+  openModal('Detail Transaksi Keuangan ' + k.idTransaksi, `
+    ${renderDetailTable([
+      ['ID Transaksi', `<strong>${k.idTransaksi}</strong>`],
+      ['Tanggal Transaksi', k.tanggal],
+      ['Uraian Transaksi', `<strong>${k.uraian}</strong>`],
+      ['Bidang / Pos Anggaran', k.bidangPos],
+      ['Jenis Mutasi', `<span class="badge ${k.jenis === 'Pemasukan' ? 'badge-in' : 'badge-out'}">${k.jenis}</span>`],
+      ['Nominal', `<strong>${formatRupiah(k.nominal)}</strong>`],
+      ['Sumber / Referensi Warta', k.sumberWarta]
+    ])}
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="btn-outline" onclick="closeModal()">Tutup</button>
+      ${isAdmin ? `<button type="button" class="btn-primary" onclick="openKeuanganModal('${k.idTransaksi}')">Edit Transaksi</button>` : ''}
+    </div>
+  `);
+}
+
+function openKeuanganModal(idTransaksi = null) {
+  const k = idTransaksi ? cache.keuangan.find(x => x.idTransaksi === idTransaksi) : {};
+  openModal(idTransaksi ? 'Edit Transaksi Keuangan ' + idTransaksi : 'Catat Transaksi Keuangan Baru', `
+    <form onsubmit="submitKeuangan(event, '${idTransaksi || ''}')">
+      <div class="input-group"><label>Tanggal</label><input id="keuTgl" value="${k.tanggal || '21 Nov 2026'}" required></div>
+      <div class="input-group"><label>Uraian Transaksi</label><input id="keuUraian" value="${k.uraian || ''}" placeholder="Contoh: Persembahan Ibadah Minggu" required></div>
+      <div class="input-group"><label>Bidang / Pos Anggaran</label><input id="keuPos" value="${k.bidangPos || 'Persembahan Rutin'}" required></div>
       <div class="input-group"><label>Jenis Transaksi</label>
-        <select id="keuJenis"><option value="Pemasukan">Pemasukan</option><option value="Pengeluaran">Pengeluaran</option></select>
+        <select id="keuJenis">
+          <option value="Pemasukan" ${k.jenis === 'Pemasukan' ? 'selected' : ''}>Pemasukan</option>
+          <option value="Pengeluaran" ${k.jenis === 'Pengeluaran' ? 'selected' : ''}>Pengeluaran</option>
+        </select>
       </div>
-      <div class="input-group"><label>Nominal (Rupiah)</label><input type="number" id="keuNom" placeholder="500000" required></div>
-      <div class="input-group"><label>Sumber / Nomor Warta</label><input id="keuRef" value="WG-46-GKJSP-XI-2026"></div>
+      <div class="input-group"><label>Nominal (Rupiah)</label><input type="number" id="keuNom" value="${k.nominal || ''}" placeholder="500000" required></div>
+      <div class="input-group"><label>Sumber / Nomor Warta</label><input id="keuRef" value="${k.sumberWarta || 'WG-47-GKJSP-XI-2026'}"></div>
       <button type="submit" class="btn-primary btn-full">Simpan Transaksi</button>
     </form>
   `);
 }
 
-async function submitKeuangan(e) {
+async function submitKeuangan(e, idTransaksi) {
   e.preventDefault();
   const res = await apiPost({
-    action: 'addKeuangan',
+    action: idTransaksi ? 'updateKeuangan' : 'addKeuangan',
+    idTransaksi,
     tanggal: document.getElementById('keuTgl').value,
     uraian: document.getElementById('keuUraian').value,
     bidangPos: document.getElementById('keuPos').value,
@@ -939,7 +1174,11 @@ async function submitKeuangan(e) {
     nominal: document.getElementById('keuNom').value,
     sumberWarta: document.getElementById('keuRef').value
   });
-  if (res.success) { closeModal(); showToast('Transaksi keuangan dicatat.'); refreshCurrentTab(); }
+  if (res.success) {
+    closeModal();
+    showToast(idTransaksi ? 'Transaksi diperbarui.' : 'Transaksi keuangan dicatat.');
+    refreshCurrentTab();
+  }
 }
 
 async function hapusKeuangan(idTransaksi) {
@@ -986,17 +1225,70 @@ function filterWarta() {
       <div class="warta-body">
         <div class="warta-title">${w.namaFile}</div>
         <div class="warta-date">${w.updatedAt} (${w.bulan})</div>
-        <div class="warta-actions">
+        <div class="warta-actions" style="flex-wrap:wrap;">
           <button type="button" class="btn-buka" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">
             <i data-lucide="book-open" class="icon-sm"></i><span>Baca</span>
           </button>
           <a href="${w.downloadUrl}" target="_blank" class="btn-unduh" title="Unduh"><i data-lucide="download" class="icon-sm"></i></a>
+          ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="viewWartaDetail('${w.id}')">Detail</button>` : ''}
+          ${isAdmin ? `<button type="button" class="btn-outline btn-sm" onclick="openEditWartaModal('${w.id}')">Edit</button>` : ''}
           ${isAdmin ? `<button type="button" class="btn-danger" onclick="hapusWarta('${w.id}')">Hapus</button>` : ''}
         </div>
       </div>
     </div>
   `).join('') || '<p style="color:var(--muted);font-size:13.5px;">Edisi Warta Jemaat tidak ditemukan.</p>';
   renderIcons();
+}
+
+function viewWartaDetail(fileId) {
+  const w = cache.warta.find(x => x.id === fileId);
+  if (!w) return;
+  openModal('Detail Dokumen Warta Jemaat', `
+    ${renderDetailTable([
+      ['Judul Edisi Warta', `<strong>${w.namaFile}</strong>`],
+      ['Folder Bulan', w.bulan],
+      ['Terakhir Diperbarui', w.updatedAt],
+      ['ID File Google Drive', `<code>${w.id}</code>`],
+      ['Tautan Unduhan', `<a href="${w.downloadUrl}" target="_blank" class="link-more">Unduh File PDF</a>`]
+    ])}
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button type="button" class="btn-outline" onclick="closeModal()">Tutup</button>
+      <button type="button" class="btn-outline" onclick="previewPdf('${w.previewUrl}', '${w.namaFile}')">Pratinjau PDF</button>
+      <button type="button" class="btn-primary" onclick="openEditWartaModal('${w.id}')">Edit Judul / Folder</button>
+    </div>
+  `);
+}
+
+function openEditWartaModal(fileId) {
+  const w = cache.warta.find(x => x.id === fileId);
+  if (!w) return;
+  openModal('Edit Informasi Warta Jemaat', `
+    <form onsubmit="submitEditWarta(event, '${fileId}')">
+      <div class="input-group"><label>Judul / Nama File Warta</label><input id="edWrNama" value="${w.namaFile}" required></div>
+      <div class="input-group"><label>Folder Bulan</label><input id="edWrBulan" value="${w.bulan}" required></div>
+      <button type="submit" id="btnEdWarta" class="btn-primary btn-full">Simpan Perubahan Warta</button>
+    </form>
+  `);
+}
+
+async function submitEditWarta(e, fileId) {
+  e.preventDefault();
+  const btn = document.getElementById('btnEdWarta');
+  btn.disabled = true; btn.textContent = 'Menyimpan perubahan...';
+  const res = await apiPost({
+    action: 'updateWarta',
+    fileId,
+    namaFile: document.getElementById('edWrNama').value,
+    bulan: document.getElementById('edWrBulan').value
+  });
+  if (res.success) {
+    closeModal();
+    showToast('Informasi warta berhasil diperbarui.');
+    refreshCurrentTab();
+  } else {
+    btn.disabled = false; btn.textContent = 'Simpan Perubahan Warta';
+    showToast(res.message || 'Gagal memperbarui warta.', true);
+  }
 }
 
 function openUploadWartaModal() {
@@ -1036,17 +1328,23 @@ async function hapusWarta(fileId) {
 async function renderUsers(container) {
   const res = await apiGet('getUsers');
   cache.users = res.data || [];
+  const pendingCount = cache.users.filter(u => (u.status || '').toLowerCase() === 'pending').length;
 
   container.innerHTML = `
     <div class="card">
       <div class="card-header">
-        <h3>Daftar Akun Pengguna (${cache.users.length} Akun)</h3>
+        <div>
+          <h3>Daftar Akun Pengguna (${cache.users.length} Akun)</h3>
+          <p style="font-size:12.5px;color:var(--muted);margin-top:2px;">
+            ${pendingCount > 0 ? `<strong style="color:#d97706;">${pendingCount} pendaftaran warga menunggu persetujuan (ACC)</strong>` : 'Seluruh akun terdaftar sudah terverifikasi'}
+          </p>
+        </div>
         <button type="button" class="btn-primary" onclick="openUserModal()"><i data-lucide="user-plus" class="icon-sm"></i><span>Tambah Akun</span></button>
       </div>
-      ${renderSearchBar('searchUsersInput', 'Cari username, nama pengguna, peran (admin/jemaat), atau wilayah...', 'filterUsers')}
+      ${renderSearchBar('searchUsersInput', 'Cari username, nama pengguna, peran (admin/jemaat), status (pending/aktif), atau wilayah...', 'filterUsers')}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Username</th><th>Nama Pengguna</th><th>Email Google</th><th>Peran</th><th>Wilayah</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Username</th><th>Nama & No. Induk</th><th>Peran</th><th>Wilayah</th><th>Status Akun</th><th>Aksi</th></tr></thead>
           <tbody id="usersTableBody"></tbody>
         </table>
       </div>
@@ -1060,58 +1358,124 @@ function filterUsers() {
   if (!tbody) return;
   const q = (document.getElementById('searchUsersInput')?.value || '').trim().toLowerCase();
 
-  const filtered = cache.users.filter(u =>
-    !q || `${u.username} ${u.nama} ${u.email} ${u.role} ${u.wilayah} ${u.noInduk}`.toLowerCase().includes(q)
+  const sorted = [...cache.users].sort((a, b) => {
+    const aPend = (a.status || '').toLowerCase() === 'pending' ? 0 : 1;
+    const bPend = (b.status || '').toLowerCase() === 'pending' ? 0 : 1;
+    return aPend - bPend;
+  });
+
+  const filtered = sorted.filter(u =>
+    !q || `${u.username} ${u.nama} ${u.role} ${u.wilayah} ${u.noInduk} ${u.status}`.toLowerCase().includes(q)
   );
 
-  tbody.innerHTML = filtered.map(u => `
-    <tr>
-      <td><strong>${u.username}</strong></td>
-      <td>${u.nama}<br><small style="color:var(--muted)">Induk: ${u.noInduk || '-'}</small></td>
-      <td>${u.email || '-'}</td>
-      <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
-      <td>${u.wilayah}</td>
-      <td>
-        ${u.username !== 'admin' ? `<button type="button" class="btn-danger" onclick="hapusUser('${u.username}')">Hapus</button>` : '<small style="color:var(--muted)">Utama</small>'}
-      </td>
-    </tr>
-  `).join('') || '<tr><td colspan="6">Akun pengguna tidak ditemukan.</td></tr>';
+  tbody.innerHTML = filtered.map(u => {
+    const st = (u.status || 'Aktif').trim();
+    const isPending = st.toLowerCase() === 'pending';
+    const isRejected = st.toLowerCase() === 'ditolak';
+    const badgeClass = isPending ? 'badge-proses' : (isRejected ? 'badge-ditolak' : 'badge-selesai');
+
+    return `
+      <tr style="${isPending ? 'background:#fffbeb;' : ''}">
+        <td><strong>${u.username}</strong></td>
+        <td><strong>${u.nama}</strong><br><small style="color:var(--muted)">Induk: ${u.noInduk || '-'}</small></td>
+        <td><span class="badge ${u.role === 'admin' ? 'badge-proses' : 'badge-selesai'}">${u.role.toUpperCase()}</span></td>
+        <td>${u.wilayah}</td>
+        <td><span class="badge ${badgeClass}">${isPending ? 'Menunggu ACC' : st}</span></td>
+        <td style="white-space:nowrap;">
+          <div class="action-group">
+            ${isPending ? `<button type="button" class="btn-primary btn-sm" onclick="accUser('${u.username}', 'Aktif')">ACC</button>` : ''}
+            ${isPending ? `<button type="button" class="btn-danger" onclick="accUser('${u.username}', 'Ditolak')">Tolak</button>` : ''}
+            <button type="button" class="btn-outline btn-sm" onclick="viewUserDetail('${u.username}')">Detail</button>
+            <button type="button" class="btn-outline btn-sm" onclick="openUserModal('${u.username}')">Edit</button>
+            ${u.username !== 'admin' ? `<button type="button" class="btn-danger" onclick="hapusUser('${u.username}')">Hapus</button>` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="6">Akun pengguna tidak ditemukan.</td></tr>';
 }
 
-// ================= MODAL & PREVIEW PDF =================
-function openUserModal() {
-  openModal('Tambah Akun Login Baru', `
-    <form onsubmit="submitUser(event)">
-      <div class="input-group"><label>Username</label><input id="usName" required></div>
-      <div class="input-group"><label>Kata Sandi</label><input id="usPass" value="123" required></div>
-      <div class="input-group"><label>Email Google (Opsional)</label><input type="email" id="usEmail" placeholder="nama@gmail.com"></div>
+async function accUser(username, status) {
+  const label = status === 'Aktif' ? 'menyetujui (ACC)' : 'menolak';
+  if (!confirm(`Apakah Anda yakin ingin ${label} pendaftaran akun "${username}"?`)) return;
+  const res = await apiPost({ action: 'approveUser', username, status });
+  if (res.success) {
+    showToast(`Akun "${username}" berhasil diubah menjadi ${status}.`);
+    refreshCurrentTab();
+  } else {
+    showToast(res.message || 'Gagal memperbarui status akun.', true);
+  }
+}
+
+function viewUserDetail(username) {
+  const u = cache.users.find(x => x.username === username);
+  if (!u) return;
+  openModal('Detail Akun Pengguna', `
+    ${renderDetailTable([
+      ['Username Login', `<strong>${u.username}</strong>`],
+      ['Kata Sandi', `<code>${u.password}</code>`],
+      ['Nama Lengkap', `<strong>${u.nama}</strong>`],
+      ['Peran (Role)', u.role.toUpperCase()],
+      ['Wilayah / Pepanthan', u.wilayah],
+      ['Nomor Induk Jemaat', u.noInduk || '-'],
+      ['Status Verifikasi Akun', `<strong>${u.status || 'Aktif'}</strong>`]
+    ])}
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="btn-outline" onclick="closeModal()">Tutup</button>
+      <button type="button" class="btn-primary" onclick="openUserModal('${u.username}')">Edit Akun</button>
+    </div>
+  `);
+}
+
+function openUserModal(username = null) {
+  const u = username ? cache.users.find(x => x.username === username) : {};
+  openModal(username ? 'Edit Akun Pengguna: ' + username : 'Tambah Akun Login Baru', `
+    <form onsubmit="submitUser(event, '${username || ''}')">
+      <div class="input-group"><label>Username</label><input id="usName" value="${u.username || ''}" ${username === 'admin' ? 'readonly' : ''} required></div>
+      <div class="input-group"><label>Kata Sandi</label><input id="usPass" value="${u.password || '123'}" required></div>
       <div class="input-group"><label>Peran (Role)</label>
-        <select id="usRole"><option value="jemaat">Jemaat (Warga)</option><option value="admin">Admin / Majelis</option></select>
+        <select id="usRole" ${username === 'admin' ? 'disabled' : ''}>
+          <option value="jemaat" ${u.role === 'jemaat' ? 'selected' : ''}>Jemaat (Warga)</option>
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin / Majelis</option>
+        </select>
       </div>
-      <div class="input-group"><label>Nama Lengkap</label><input id="usNama" required></div>
+      <div class="input-group"><label>Nama Lengkap</label><input id="usNama" value="${u.nama || ''}" required></div>
       <div class="input-group"><label>Wilayah</label>
-        <select id="usWilayah">${WILAYAH_LIST.map(w => `<option value="${w}">${w}</option>`).join('')}</select>
+        <select id="usWilayah">${WILAYAH_LIST.map(w => `<option value="${w}" ${u.wilayah === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
       </div>
-      <div class="input-group"><label>Nomor Induk Jemaat</label><input id="usInduk" placeholder="JM-2026-..."></div>
-      <button type="submit" class="btn-primary btn-full">Buat Akun</button>
+      <div class="input-group"><label>Nomor Induk Jemaat</label><input id="usInduk" value="${u.noInduk || ''}" placeholder="JM-2026-..."></div>
+      <div class="input-group"><label>Status Verifikasi Akun</label>
+        <select id="usStatus">
+          <option value="Aktif" ${(u.status || 'Aktif') === 'Aktif' ? 'selected' : ''}>Aktif (Sudah Di-ACC)</option>
+          <option value="Pending" ${u.status === 'Pending' ? 'selected' : ''}>Pending (Menunggu ACC)</option>
+          <option value="Ditolak" ${u.status === 'Ditolak' ? 'selected' : ''}>Ditolak</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-primary btn-full">${username ? 'Simpan Perubahan Akun' : 'Buat Akun'}</button>
     </form>
   `);
 }
 
-async function submitUser(e) {
+async function submitUser(e, originalUsername) {
   e.preventDefault();
   const res = await apiPost({
-    action: 'addUser',
+    action: originalUsername ? 'updateUser' : 'addUser',
+    originalUsername,
     username: document.getElementById('usName').value,
     password: document.getElementById('usPass').value,
-    email: document.getElementById('usEmail').value,
     role: document.getElementById('usRole').value,
     nama: document.getElementById('usNama').value,
     wilayah: document.getElementById('usWilayah').value,
-    noInduk: document.getElementById('usInduk').value
+    noInduk: document.getElementById('usInduk').value,
+    status: document.getElementById('usStatus').value
   });
-  if (res.success) { closeModal(); showToast('Akun baru ditambahkan.'); refreshCurrentTab(); }
-  else showToast(res.message || 'Gagal menambah akun.', true);
+  if (res.success) {
+    closeModal();
+    showToast(originalUsername ? 'Akun berhasil diperbarui.' : 'Akun baru ditambahkan.');
+    refreshCurrentTab();
+  } else {
+    showToast(res.message || 'Gagal menyimpan akun.', true);
+  }
 }
 
 async function hapusUser(username) {
